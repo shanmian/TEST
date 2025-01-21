@@ -1,0 +1,117 @@
+import React, { useState, memo, ReactNode } from 'react';
+import {
+  Box,
+  Tabs,
+  Tab,
+  Stepper,
+  Step,
+  StepLabel,
+  Typography,
+  Paper,
+  SxProps,
+  Theme,
+} from '@mui/material';
+
+interface TabPanelProps {
+  children?: ReactNode;
+  value: number;
+  index: number;
+}
+
+interface NavigationComponentProps {
+  type?: 'tabs' | 'stepper';
+  items: ReactNode[];
+  contents: ReactNode[];
+  activeIndex?: number;
+  onChange?: (index: number) => void;
+  sx?: SxProps<Theme>;
+  orientation?: 'horizontal' | 'vertical';
+}
+
+const TabPanel = memo(({ children, value, index, ...other }: TabPanelProps) => {
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ p: 3 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+});
+
+const NavigationComponent: React.FC<NavigationComponentProps> = ({
+  type = 'tabs',
+  items = [],
+  contents = [],
+  activeIndex = 0,
+  onChange,
+  sx,
+  orientation = 'horizontal',
+}) => {
+  const [currentIndex, setCurrentIndex] = useState(activeIndex);
+
+  const handleChange = (_event: React.SyntheticEvent | null, newValue: number) => {
+    setCurrentIndex(newValue);
+    onChange?.(newValue);
+  };
+
+  const TabsComponent = () => (
+    <>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+        <Tabs 
+          value={currentIndex} 
+          onChange={handleChange}
+          variant="scrollable"
+          scrollButtons="auto"
+          orientation={orientation}
+        >
+          {items.map((item, index) => (
+            <Tab key={index} label={item} />
+          ))}
+        </Tabs>
+      </Box>
+      {contents.map((content, index) => (
+        <TabPanel key={index} value={currentIndex} index={index}>
+          {content}
+        </TabPanel>
+      ))}
+    </>
+  );
+
+  const StepperComponent = () => (
+    <>
+      <Stepper 
+        activeStep={currentIndex} 
+        orientation={orientation}
+        sx={{ p: 3 }}
+        nonLinear
+      >
+        {items.map((label, index) => (
+          <Step 
+            key={index} 
+            onClick={() => handleChange(null, index)}
+            sx={{ cursor: 'pointer' }}
+          >
+            <StepLabel>{label}</StepLabel>
+          </Step>
+        ))}
+      </Stepper>
+      <Box sx={{ p: 3 }}>
+        {contents[currentIndex] || <Typography>暂无内容</Typography>}
+      </Box>
+    </>
+  );
+
+  return (
+    <Paper elevation={3} sx={{ width: '100%', ...sx }}>
+      {type === 'tabs' ? <TabsComponent /> : <StepperComponent />}
+    </Paper>
+  );
+};
+
+export default NavigationComponent;
