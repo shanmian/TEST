@@ -1,0 +1,230 @@
+要将上面的代码转换为 TypeScript (TS)，我们需要为状态、Reducer、Context 以及组件添加类型定义。以下是使用 TypeScript 重构后的代码：
+
+---
+
+### 1. 创建 Context 和 Reducer（TypeScript 版本）
+
+```tsx
+import React, { createContext, useReducer, Dispatch } from 'react';
+
+// 定义状态类型
+interface StepperState {
+activeStep: number;
+formData: Record<string, string>; // 表单数据存储为键值对
+}
+
+// 初始状态
+const initialState: StepperState = {
+activeStep: 0,
+formData: {},
+};
+
+// 定义 Action 类型
+type StepperAction =
+| { type: 'NEXT_STEP' }
+| { type: 'PREV_STEP' }
+| { type: 'UPDATE_FORM_DATA'; payload: Record<string, string> };
+
+// Reducer 函数
+const stepperReducer = (state: StepperState, action: StepperAction): StepperState => {
+switch (action.type) {
+case 'NEXT_STEP':
+return {
+...state,
+activeStep: state.activeStep + 1,
+};
+case 'PREV_STEP':
+return {
+...state,
+activeStep: state.activeStep - 1,
+};
+case 'UPDATE_FORM_DATA':
+return {
+...state,
+formData: {
+...state.formData,
+...action.payload,
+},
+};
+default:
+return state;
+}
+};
+
+// 创建 Context
+interface StepperContextType {
+state: StepperState;
+dispatch: Dispatch<StepperAction>;
+}
+
+export const StepperContext = createContext<StepperContextType | undefined>(undefined);
+
+// Context Provider 组件
+export const StepperProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const [state, dispatch] = useReducer(stepperReducer, initialState);
+
+return (
+<StepperContext.Provider value={{ state, dispatch }}>
+{children}
+</StepperContext.Provider>
+);
+};
+```
+
+---
+
+### 2. 使用 Context 和 Reducer 包裹 Stepper 组件（TypeScript 版本）
+
+```tsx
+import React from 'react';
+import { StepperProvider } from './StepperContext';
+import StepperComponent from './StepperComponent';
+
+const App: React.FC = () => {
+return (
+<StepperProvider>
+<StepperComponent />
+</StepperProvider>
+);
+};
+
+export default App;
+```
+
+---
+
+### 3. 在 Stepper 组件中使用 Context（TypeScript 版本）
+
+```tsx
+import React, { useContext } from 'react';
+import { StepperContext } from './StepperContext';
+import { Stepper, Step, StepLabel, Button, TextField } from '@mui/material';
+
+const StepperComponent: React.FC = () => {
+const stepperContext = useContext(StepperContext);
+
+// 确保 Context 存在
+if (!stepperContext) {
+throw new Error('StepperComponent must be used within a StepperProvider');
+}
+
+const { state, dispatch } = stepperContext;
+const { activeStep, formData } = state;
+
+const handleNext = () => {
+dispatch({ type: 'NEXT_STEP' });
+};
+
+const handleBack = () => {
+dispatch({ type: 'PREV_STEP' });
+};
+
+const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+const { name, value } = e.target;
+dispatch({
+type: 'UPDATE_FORM_DATA',
+payload: { [name]: value },
+});
+};
+
+const steps = ['Step 1', 'Step 2', 'Step 3'];
+
+const getStepContent = (step: number) => {
+switch (step) {
+case 0:
+return (
+<TextField
+name="firstName"
+label="First Name"
+value={formData.firstName || ''}
+onChange={handleInputChange}
+/>
+);
+case 1:
+return (
+<TextField
+name="lastName"
+label="Last Name"
+value={formData.lastName || ''}
+onChange={handleInputChange}
+/>
+);
+case 2:
+return (
+<TextField
+name="email"
+label="Email"
+value={formData.email || ''}
+onChange={handleInputChange}
+/>
+);
+default:
+return 'Unknown step';
+}
+};
+
+return (
+<div>
+<Stepper activeStep={activeStep}>
+{steps.map((label) => (
+<Step key={label}>
+<StepLabel>{label}</StepLabel>
+</Step>
+))}
+</Stepper>
+<div>
+{getStepContent(activeStep)}
+<Button disabled={activeStep === 0} onClick={handleBack}>
+Back
+</Button>
+<Button
+variant="contained"
+color="primary"
+onClick={handleNext}
+disabled={activeStep === steps.length - 1}
+>
+{activeStep === steps.length - 1 ? 'Finish' : 'Next'}
+</Button>
+</div>
+</div>
+);
+};
+
+export default StepperComponent;
+```
+
+---
+
+### 4. 关键改动说明
+
+1. **类型定义**：
+- 定义了 `StepperState` 和 `StepperAction` 类型，确保状态和 Action 的类型安全。
+- 使用 `Record<string, string>` 表示表单数据，键为字符串，值为字符串。
+
+2. **Context 类型**：
+- 使用 `StepperContextType` 定义了 Context 的类型，确保 `state` 和 `dispatch` 的类型正确。
+
+3. **组件类型**：
+- 使用 `React.FC` 定义函数组件，并为 `StepperProvider` 和 `StepperComponent` 添加了类型。
+
+4. **事件处理**：
+- 为 `handleInputChange` 添加了 `React.ChangeEvent<HTMLInputElement>` 类型，确保事件对象的类型安全。
+
+5. **Context 检查**：
+- 在使用 `useContext` 时，检查 `stepperContext` 是否存在，如果不存在则抛出错误，避免运行时错误。
+
+---
+
+### 5. 运行效果
+
+- 每个步骤的表单数据会通过 `Context` 共享。
+- 用户可以在不同步骤之间切换，表单数据会保留。
+- 使用 TypeScript 后，代码具有更好的类型安全性和可维护性。
+
+---
+
+### 6. 扩展建议
+
+- 如果需要更复杂的表单验证，可以为 `formData` 添加更详细的类型定义。
+- 如果需要支持更多步骤，可以动态生成 `steps` 数组。
+- 如果需要异步操作（如 API 调用），可以在 `Reducer` 中添加异步逻辑。
