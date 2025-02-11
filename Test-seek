@@ -1,0 +1,104 @@
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { StepperProvider, StepperContext } from './StepperContext';
+import StepperComponent from './StepperComponent';
+
+describe('StepperComponent', () => {
+  // 测试初始状态
+  it('renders the initial step correctly', () => {
+    render(
+      <StepperProvider>
+        <StepperComponent />
+      </StepperProvider>
+    );
+
+    // 检查初始步骤是否为 Step 1
+    expect(screen.getByText('Step 1')).toBeInTheDocument();
+    expect(screen.getByLabelText('First Name')).toBeInTheDocument();
+  });
+
+  // 测试点击下一步按钮
+  it('moves to the next step when Next button is clicked', () => {
+    render(
+      <StepperProvider>
+        <StepperComponent />
+      </StepperProvider>
+    );
+
+    // 点击 Next 按钮
+    fireEvent.click(screen.getByText('Next'));
+
+    // 检查是否切换到 Step 2
+    expect(screen.getByText('Step 2')).toBeInTheDocument();
+    expect(screen.getByLabelText('Last Name')).toBeInTheDocument();
+  });
+
+  // 测试点击上一步按钮
+  it('moves to the previous step when Back button is clicked', () => {
+    render(
+      <StepperProvider>
+        <StepperComponent />
+      </StepperProvider>
+    );
+
+    // 先切换到 Step 2
+    fireEvent.click(screen.getByText('Next'));
+
+    // 点击 Back 按钮
+    fireEvent.click(screen.getByText('Back'));
+
+    // 检查是否返回到 Step 1
+    expect(screen.getByText('Step 1')).toBeInTheDocument();
+    expect(screen.getByLabelText('First Name')).toBeInTheDocument();
+  });
+
+  // 测试点击步骤标签切换步骤
+  it('switches steps when a step label is clicked', () => {
+    render(
+      <StepperProvider>
+        <StepperComponent />
+      </StepperProvider>
+    );
+
+    // 点击 Step 3 标签
+    fireEvent.click(screen.getByText('Step 3'));
+
+    // 检查是否切换到 Step 3
+    expect(screen.getByText('Step 3')).toBeInTheDocument();
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();
+  });
+
+  // 测试表单数据更新
+  it('updates form data when input values change', () => {
+    render(
+      <StepperProvider>
+        <StepperComponent />
+      </StepperProvider>
+    );
+
+    // 输入 First Name
+    const firstNameInput = screen.getByLabelText('First Name') as HTMLInputElement;
+    fireEvent.change(firstNameInput, { target: { value: 'John' } });
+
+    // 检查输入值是否正确更新
+    expect(firstNameInput.value).toBe('John');
+  });
+
+  // 测试按钮的禁用状态
+  it('disables Back button on the first step and Next button on the last step', () => {
+    render(
+      <StepperProvider>
+        <StepperComponent />
+      </StepperProvider>
+    );
+
+    // 检查 Back 按钮在第一步是否禁用
+    expect(screen.getByText('Back')).toBeDisabled();
+
+    // 切换到 Step 3
+    fireEvent.click(screen.getByText('Step 3'));
+
+    // 检查 Next 按钮在最后一步是否禁用
+    expect(screen.getByText('Next')).toBeDisabled();
+  });
+});
