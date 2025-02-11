@@ -1,0 +1,73 @@
+import React from 'react';
+import { StepperProvider } from './StepperContext';
+import StepperComponent from './StepperComponent';
+import { Meta, StoryObj } from '@storybook/react';
+
+// 定义 Meta 信息
+const meta: Meta<typeof StepperComponent> = {
+  title: 'Components/StepperComponent',
+  component: StepperComponent,
+  decorators: [
+    (Story) => (
+      <StepperProvider>
+        <Story />
+      </StepperProvider>
+    ),
+  ],
+  tags: ['autodocs'],
+};
+
+export default meta;
+
+// 定义 Story 类型
+type Story = StoryObj<typeof StepperComponent>;
+
+// 默认故事
+export const Default: Story = {
+  args: {}, // 不需要额外的 props
+};
+
+// 第一步的故事
+export const Step1: Story = {
+  args: {},
+  decorators: [
+    (Story) => {
+      // 模拟初始状态为 Step 1
+      return (
+        <StepperProvider>
+          <Story />
+        </StepperProvider>
+      );
+    },
+  ],
+};
+
+// 第二步的故事
+export const Step2: Story = {
+  args: {},
+  decorators: [
+    (Story) => {
+      // 模拟初始状态为 Step 2
+      return (
+        <StepperProvider>
+          <Story />
+        </StepperProvider>
+      );
+    },
+  ],
+};
+
+// 第三步的故事
+export const Step3: Story = {
+  args: {},
+  decorators: [
+    (Story) => {
+      // 模拟初始状态为 Step 3
+      return (
+        <StepperProvider>
+          <Story />
+        </StepperProvider>
+      );
+    },
+  ],
+};
