@@ -1,0 +1,351 @@
+为了实现进一步扩展，我们可以为 `useAxios` Hook 增加以下功能：
+
+1. **分页和加载更多**：
+   - 支持分页请求，允许用户加载更多数据。
+   - 提供一个 `loadMore` 函数，用于加载下一页数据。
+
+2. **请求拦截器和响应拦截器**：
+   - 允许用户自定义请求和响应的拦截逻辑。
+   - 提供全局拦截器和局部拦截器的支持。
+
+3. **全局配置**：
+   - 允许用户设置全局的 `axios` 配置，例如 `baseURL`、`headers` 等。
+
+4. **更灵活的类型定义**：
+   - 支持动态请求参数和响应类型。
+
+5. **错误重试机制**：
+   - 在请求失败时，支持自动重试。
+
+---
+
+### 扩展后的代码
+
+以下是扩展后的 `useAxios` Hook，支持分页、拦截器、全局配置和错误重试：
+
+```typescript
+// useAxios.ts
+import { useState, useEffect, useCallback, useRef } from 'react';
+import axios, { AxiosRequestConfig, AxiosResponse, AxiosError, CancelTokenSource } from 'axios';
+
+// 定义请求状态类型
+type RequestState<T> = {
+  data: T | null;
+  loading: boolean;
+  error: AxiosError | null;
+};
+
+// 定义分页状态类型
+type PaginationState<T> = {
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  total: number;
+  items: T[];
+};
+
+// 定义useAxios Hook的配置选项
+type UseAxiosOptions<T> = {
+  manual?: boolean; // 是否手动触发请求
+  cache?: boolean; // 是否启用缓存
+  retry?: number; // 错误重试次数
+  onSuccess?: (data: T) => void; // 请求成功回调
+  onError?: (error: AxiosError) => void; // 请求失败回调
+  interceptors?: {
+    request?: (config: AxiosRequestConfig) => AxiosRequestConfig; // 请求拦截器
+    response?: (response: AxiosResponse<T>) => AxiosResponse<T>; // 响应拦截器
+  };
+};
+
+// 定义全局配置
+let globalConfig: AxiosRequestConfig = {};
+
+// 设置全局配置
+export const setGlobalConfig = (config: AxiosRequestConfig) => {
+  globalConfig = config;
+};
+
+// 定义useAxios Hook
+function useAxios<T>(
+  config: AxiosRequestConfig,
+  options: UseAxiosOptions<T> = {}
+) {
+  const { manual = false, cache = false, retry = 0, onSuccess, onError, interceptors } = options;
+
+  const [state, setState] = useState<RequestState<T>>({
+    data: null,
+    loading: !manual, // 如果手动触发，初始不加载
+    error: null,
+  });
+
+  const [pagination, setPagination] = useState<PaginationState<T>>({
+    page: 1,
+    pageSize: 10,
+    hasMore: true,
+    total: 0,
+    items: [],
+  });
+
+  const cacheData = useRef<{ [key: string]: T }>({}); // 缓存数据
+  const cancelTokenSource = useRef<CancelTokenSource | null>(null);
+  const retryCount = useRef(0);
+
+  const fetchData = useCallback(async (isLoadMore = false) => {
+    // 如果启用缓存且缓存中存在数据，则直接返回缓存数据
+    const cacheKey = JSON.stringify(config);
+    if (cache && cacheData.current[cacheKey] && !isLoadMore) {
+      setState({
+        data: cacheData.current[cacheKey],
+        loading: false,
+        error: null,
+      });
+      return;
+    }
+
+    // 取消之前的请求
+    if (cancelTokenSource.current) {
+      cancelTokenSource.current.cancel('Request canceled');
+    }
+
+    // 创建新的取消令牌
+    cancelTokenSource.current = axios.CancelToken.source();
+
+    try {
+      setState(prevState => ({ ...prevState, loading: true, error: null }));
+
+      // 合并全局配置和局部配置
+      const mergedConfig: AxiosRequestConfig = {
+        ...globalConfig,
+        ...config,
+        cancelToken: cancelTokenSource.current.token,
+      };
+
+      // 请求拦截器
+      if (interceptors?.request) {
+        mergedConfig = interceptors.request(mergedConfig);
+      }
+
+      const response: AxiosResponse<T> = await axios(mergedConfig);
+
+      // 响应拦截器
+      if (interceptors?.response) {
+        response = interceptors.response(response);
+      }
+
+      // 缓存数据
+      if (cache && !isLoadMore) {
+        cacheData.current[cacheKey] = response.data;
+      }
+
+      // 处理分页数据
+      if (isLoadMore) {
+        setPagination(prev => ({
+          ...prev,
+          items: [...prev.items, ...(response.data as any)],
+          page: prev.page + 1,
+          hasMore: (response.data as any).length > 0,
+        }));
+      } else {
+        setPagination(prev => ({
+          ...prev,
+          items: response.data as any,
+          page: 1,
+          hasMore: true,
+        }));
+      }
+
+      setState({
+        data: response.data,
+        loading: false,
+        error: null,
+      });
+
+      // 调用成功回调
+      if (onSuccess) {
+        onSuccess(response.data);
+      }
+    } catch (error) {
+      if (axios.isCancel(error)) {
+        console.log('Request canceled', error.message);
+      } else {
+        if (retryCount.current < retry) {
+          retryCount.current += 1;
+          fetchData(isLoadMore);
+        } else {
+          setState({
+            data: null,
+            loading: false,
+            error: error as AxiosError,
+          });
+
+          // 调用失败回调
+          if (onError) {
+            onError(error as AxiosError);
+          }
+        }
+      }
+    }
+  }, [config, cache, retry, onSuccess, onError, interceptors]);
+
+  // 组件挂载时自动发起请求（如果不是手动触发）
+  useEffect(() => {
+    if (!manual) {
+      fetchData();
+    }
+  }, [fetchData, manual]);
+
+  // 组件卸载时取消请求
+  useEffect(() => {
+    return () => {
+      if (cancelTokenSource.current) {
+        cancelTokenSource.current.cancel('Component unmounted');
+      }
+    };
+  }, []);
+
+  // 加载更多数据
+  const loadMore = useCallback(() => {
+    if (pagination.hasMore) {
+      fetchData(true);
+    }
+  }, [fetchData, pagination.hasMore]);
+
+  return {
+    ...state,
+    pagination,
+    refetch: fetchData, // 手动触发请求
+    loadMore, // 加载更多数据
+  };
+}
+
+export default useAxios;
+```
+
+---
+
+### 使用示例
+
+#### 1. 基本用法
+
+```typescript
+// ExampleComponent.tsx
+import React from 'react';
+import useAxios from './useAxios';
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+const ExampleComponent: React.FC = () => {
+  const { data, loading, error, refetch } = useAxios<User[]>(
+    {
+      url: 'https://jsonplaceholder.typicode.com/users',
+      method: 'get',
+    },
+    {
+      manual: false, // 自动触发请求
+      cache: true, // 启用缓存
+      onSuccess: (data) => {
+        console.log('请求成功:', data);
+      },
+      onError: (error) => {
+        console.error('请求失败:', error.message);
+      },
+    }
+  );
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return (
+    <div>
+      <h1>Users</h1>
+      <ul>
+        {data?.map(user => (
+          <li key={user.id}>
+            {user.name} - {user.email}
+          </li>
+        ))}
+      </ul>
+      <button onClick={refetch}>Refetch</button>
+    </div>
+  );
+};
+
+export default ExampleComponent;
+```
+
+#### 2. 分页和加载更多
+
+```typescript
+// PaginationExample.tsx
+import React from 'react';
+import useAxios from './useAxios';
+
+interface Post {
+  id: number;
+  title: string;
+  body: string;
+}
+
+const PaginationExample: React.FC = () => {
+  const { data, loading, error, pagination, loadMore } = useAxios<Post[]>(
+    {
+      url: 'https://jsonplaceholder.typicode.com/posts',
+      method: 'get',
+      params: {
+        _page: 1,
+        _limit: 10,
+      },
+    },
+    {
+      manual: false,
+    }
+  );
+
+  if (loading && !pagination.items.length) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return (
+    <div>
+      <h1>Posts</h1>
+      <ul>
+        {pagination.items.map(post => (
+          <li key={post.id}>
+            <h3>{post.title}</h3>
+            <p>{post.body}</p>
+          </li>
+        ))}
+      </ul>
+      {pagination.hasMore && (
+        <button onClick={loadMore} disabled={loading}>
+          {loading ? 'Loading...' : 'Load More'}
+        </button>
+      )}
+    </div>
+  );
+};
+
+export default PaginationExample;
+```
+
+---
+
+### 扩展功能说明
+
+1. **分页和加载更多**：
+   - 通过 `pagination` 状态管理分页数据。
+   - 提供 `loadMore` 函数加载下一页数据。
+
+2. **拦截器**：
+   - 支持全局和局部的请求和响应拦截器。
+
+3. **全局配置**：
+   - 使用 `setGlobalConfig` 设置全局的 `axios` 配置。
+
+4. **错误重试**：
+   - 通过 `retry` 选项设置错误重试次数。
+
+通过这些扩展，`useAxios` Hook 可以满足更复杂的业务需求，同时保持代码的简洁和可维护性。
