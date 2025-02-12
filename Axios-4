@@ -1,0 +1,150 @@
+要使用 React Hooks 和 TypeScript 封装 `axios`，并创建一个新的 `axios` 实例，你可以按照以下步骤进行：
+
+### 1. 安装依赖
+
+首先，确保你已经安装了 `axios` 和 `react`：
+
+```bash
+npm install axios
+npm install react react-dom
+npm install --save-dev typescript @types/react @types/react-dom
+```
+
+### 2. 创建 `axios` 实例
+
+在 `src` 目录下创建一个 `api` 文件夹，并在其中创建一个 `axiosInstance.ts` 文件：
+
+```typescript
+// src/api/axiosInstance.ts
+import axios from 'axios';
+
+const axiosInstance = axios.create({
+  baseURL: 'https://jsonplaceholder.typicode.com', // 你的 API 基础 URL
+  timeout: 10000, // 请求超时时间
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// 请求拦截器
+axiosInstance.interceptors.request.use(
+  (config) => {
+    // 在发送请求之前做些什么
+    // 例如，添加 token 到 headers
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    // 对请求错误做些什么
+    return Promise.reject(error);
+  }
+);
+
+// 响应拦截器
+axiosInstance.interceptors.response.use(
+  (response) => {
+    // 对响应数据做些什么
+    return response.data;
+  },
+  (error) => {
+    // 对响应错误做些什么
+    return Promise.reject(error);
+  }
+);
+
+export default axiosInstance;
+```
+
+### 3. 创建自定义 Hook
+
+在 `src/api` 文件夹下创建一个 `useAxios.ts` 文件，用于封装 `axios` 请求：
+
+```typescript
+// src/api/useAxios.ts
+import { useState, useEffect, useCallback } from 'react';
+import axiosInstance from './axiosInstance';
+
+type HttpMethod = 'get' | 'post' | 'put' | 'delete';
+
+interface UseAxiosOptions {
+  url: string;
+  method?: HttpMethod;
+  data?: any;
+  params?: any;
+  headers?: any;
+}
+
+const useAxios = <T>({ url, method = 'get', data, params, headers }: UseAxiosOptions) => {
+  const [response, setResponse] = useState<T | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const result = await axiosInstance({
+        url,
+        method,
+        data,
+        params,
+        headers,
+      });
+      setResponse(result.data);
+    } catch (err: any) {
+      setError(err.message || 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  }, [url, method, data, params, headers]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  return { response, error, loading };
+};
+
+export default useAxios;
+```
+
+### 4. 使用自定义 Hook
+
+现在你可以在组件中使用 `useAxios` Hook 来发起请求：
+
+```typescript
+// src/components/ExampleComponent.tsx
+import React from 'react';
+import useAxios from '../api/useAxios';
+
+const ExampleComponent: React.FC = () => {
+  const { response, error, loading } = useAxios<{ title: string }>({
+    url: '/posts/1',
+  });
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error}</div>;
+
+  return (
+    <div>
+      <h1>Post Title</h1>
+      <p>{response?.title}</p>
+    </div>
+  );
+};
+
+export default ExampleComponent;
+```
+
+### 5. 运行项目
+
+确保你的项目已经配置好 TypeScript 和 React，然后运行项目：
+
+```bash
+npm start
+```
+
+### 总结
+
+通过以上步骤，你已经成功使用 React Hooks 和 TypeScript 封装了 `axios`，并创建了一个新的 `axios` 实例。你可以根据需要进一步扩展和优化这个封装，例如添加更多的拦截器、处理不同的 HTTP 方法等。
