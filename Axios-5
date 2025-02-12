@@ -1,0 +1,236 @@
+为了进一步扩展和优化 `axios` 封装，我们可以添加以下功能：
+
+1. **取消请求**：支持取消请求，避免组件卸载时仍然发起请求。
+2. **缓存机制**：添加简单的缓存功能，避免重复请求相同数据。
+3. **重试机制**：在请求失败时自动重试。
+4. **类型安全**：增强 TypeScript 类型推断，确保请求和响应的类型安全。
+5. **全局配置**：支持全局配置请求和响应拦截器。
+6. **错误处理**：统一处理错误，提供更友好的错误提示。
+
+以下是优化后的代码：
+
+---
+
+### 1. 扩展 `axiosInstance.ts`
+
+```typescript
+// src/api/axiosInstance.ts
+import axios from 'axios';
+
+// 创建 axios 实例
+const axiosInstance = axios.create({
+  baseURL: 'https://jsonplaceholder.typicode.com', // 你的 API 基础 URL
+  timeout: 10000, // 请求超时时间
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// 请求拦截器
+axiosInstance.interceptors.request.use(
+  (config) => {
+    // 在发送请求之前做些什么
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    // 对请求错误做些什么
+    return Promise.reject(error);
+  }
+);
+
+// 响应拦截器
+axiosInstance.interceptors.response.use(
+  (response) => {
+    // 对响应数据做些什么
+    return response.data;
+  },
+  (error) => {
+    // 对响应错误做些什么
+    if (error.response) {
+      switch (error.response.status) {
+        case 401:
+          console.error('Unauthorized, please login again.');
+          break;
+        case 404:
+          console.error('Resource not found.');
+          break;
+        case 500:
+          console.error('Server error, please try again later.');
+          break;
+        default:
+          console.error('An error occurred.');
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default axiosInstance;
+```
+
+---
+
+### 2. 扩展 `useAxios.ts`
+
+```typescript
+// src/api/useAxios.ts
+import { useState, useEffect, useCallback, useRef } from 'react';
+import axiosInstance from './axiosInstance';
+import { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
+
+type HttpMethod = 'get' | 'post' | 'put' | 'delete';
+
+interface UseAxiosOptions<T> {
+  url: string;
+  method?: HttpMethod;
+  data?: T;
+  params?: any;
+  headers?: any;
+  cache?: boolean; // 是否启用缓存
+  retry?: number; // 重试次数
+  retryDelay?: number; // 重试延迟时间（毫秒）
+}
+
+interface UseAxiosResult<T> {
+  response: T | null;
+  error: string | null;
+  loading: boolean;
+  cancel: () => void; // 取消请求的方法
+}
+
+const useAxios = <T>({
+  url,
+  method = 'get',
+  data,
+  params,
+  headers,
+  cache = false,
+  retry = 0,
+  retryDelay = 1000,
+}: UseAxiosOptions<T>): UseAxiosResult<T> => {
+  const [response, setResponse] = useState<T | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const cacheRef = useRef<{ [key: string]: T }>({}); // 缓存对象
+  const retryCountRef = useRef<number>(0); // 重试计数器
+  const cancelTokenSourceRef = useRef(axios.CancelToken.source()); // 取消请求的 token
+
+  const fetchData = useCallback(async () => {
+    try {
+      // 如果启用缓存且缓存中存在数据，则直接返回缓存数据
+      if (cache && cacheRef.current[url]) {
+        setResponse(cacheRef.current[url]);
+        setLoading(false);
+        return;
+      }
+
+      const result: AxiosResponse<T> = await axiosInstance({
+        url,
+        method,
+        data,
+        params,
+        headers,
+        cancelToken: cancelTokenSourceRef.current.token, // 绑定取消请求的 token
+      });
+
+      setResponse(result.data);
+      if (cache) {
+        cacheRef.current[url] = result.data; // 缓存数据
+      }
+    } catch (err: any) {
+      if (axios.isCancel(err)) {
+        console.log('Request canceled:', err.message);
+      } else {
+        setError(err.message || 'Something went wrong');
+        // 如果配置了重试机制，则重试请求
+        if (retryCountRef.current < retry) {
+          retryCountRef.current += 1;
+          setTimeout(fetchData, retryDelay);
+        } else {
+          setLoading(false);
+        }
+      }
+    } finally {
+      if (retryCountRef.current >= retry) {
+        setLoading(false);
+      }
+    }
+  }, [url, method, data, params, headers, cache, retry, retryDelay]);
+
+  useEffect(() => {
+    fetchData();
+
+    // 组件卸载时取消请求
+    return () => {
+      cancelTokenSourceRef.current.cancel('Component unmounted, request canceled.');
+    };
+  }, [fetchData]);
+
+  // 取消请求的方法
+  const cancel = () => {
+    cancelTokenSourceRef.current.cancel('Request canceled by user.');
+  };
+
+  return { response, error, loading, cancel };
+};
+
+export default useAxios;
+```
+
+---
+
+### 3. 使用优化后的 `useAxios`
+
+```typescript
+// src/components/ExampleComponent.tsx
+import React from 'react';
+import useAxios from '../api/useAxios';
+
+const ExampleComponent: React.FC = () => {
+  const { response, error, loading, cancel } = useAxios<{ title: string }>({
+    url: '/posts/1',
+    cache: true, // 启用缓存
+    retry: 3, // 重试 3 次
+    retryDelay: 1000, // 每次重试延迟 1 秒
+  });
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error}</div>;
+
+  return (
+    <div>
+      <h1>Post Title</h1>
+      <p>{response?.title}</p>
+      <button onClick={cancel}>Cancel Request</button>
+    </div>
+  );
+};
+
+export default ExampleComponent;
+```
+
+---
+
+### 4. 进一步优化
+
+- **全局错误处理**：可以在 `axiosInstance.ts` 中统一处理错误，例如跳转到登录页面或显示全局错误提示。
+- **缓存策略**：可以根据需求扩展缓存机制，例如设置缓存过期时间。
+- **请求队列**：如果需要限制并发请求数量，可以实现请求队列。
+- **类型推断**：通过泛型增强请求和响应的类型推断，确保类型安全。
+
+---
+
+### 总结
+
+通过以上优化，我们实现了以下功能：
+1. 支持取消请求，避免组件卸载时仍然发起请求。
+2. 添加了缓存机制，避免重复请求相同数据。
+3. 支持重试机制，在请求失败时自动重试。
+4. 增强了 TypeScript 类型推断，确保类型安全。
+5. 提供了全局错误处理和拦截器配置。
+
+你可以根据项目需求进一步扩展和优化这些功能。
