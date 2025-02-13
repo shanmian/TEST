@@ -1,0 +1,29 @@
+{
+    "code": 200,
+    "message": "success",
+    "data": {
+      "users": [
+        {
+          "id": 1,
+          "name": "张三",
+          "email": "zhangsan@example.com",
+          "age": 28,
+          "role": "admin"
+        },
+        {
+          "id": 2,
+          "name": "李四",
+          "email": "lisi@example.com",
+          "age": 24,
+          "role": "user"
+        },
+        {
+          "id": 3,
+          "name": "王五",
+          "email": "wangwu@example.com",
+          "age": 32,
+          "role": "user"
+        }
+      ]
+    }
+  }
