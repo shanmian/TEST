@@ -1,0 +1,163 @@
+为了扩展 `useAxios` Hook 以支持自定义的 `axios` 实例，我们可以对代码进行一些调整。这样，用户可以选择使用默认的 `axios` 实例，或者传入一个自定义的 `axios` 实例。以下是扩展后的代码：
+
+```typescript
+// useAxios.ts
+import { useState, useEffect, useCallback, useRef } from 'react';
+import axios, { AxiosRequestConfig, AxiosResponse, AxiosError, CancelTokenSource, AxiosInstance } from 'axios';
+
+// 定义请求状态类型
+type RequestState<T> = {
+  data: T | null;
+  loading: boolean;
+  error: AxiosError | null;
+};
+
+// 定义useAxios Hook的配置选项
+type UseAxiosOptions<T> = {
+  manual?: boolean; // 是否手动触发请求
+  cache?: boolean; // 是否启用缓存
+  onSuccess?: (data: T) => void; // 请求成功回调
+  onError?: (error: AxiosError) => void; // 请求失败回调
+  axiosInstance?: AxiosInstance; // 自定义axios实例
+};
+
+// 定义useAxios Hook
+function useAxios<T>(
+  config: AxiosRequestConfig,
+  options: UseAxiosOptions<T> = {}
+) {
+  const { manual = false, cache = false, onSuccess, onError, axiosInstance = axios } = options;
+
+  const [state, setState] = useState<RequestState<T>>({
+    data: null,
+    loading: !manual, // 如果手动触发，初始不加载
+    error: null,
+  });
+
+  const cacheData = useRef<{ [key: string]: T }>({}); // 缓存数据
+  const cancelTokenSource = useRef<CancelTokenSource | null>(null);
+
+  const fetchData = useCallback(async () => {
+    // 如果启用缓存且缓存中存在数据，则直接返回缓存数据
+    const cacheKey = JSON.stringify(config);
+    if (cache && cacheData.current[cacheKey]) {
+      setState({
+        data: cacheData.current[cacheKey],
+        loading: false,
+        error: null,
+      });
+      return;
+    }
+
+    // 取消之前的请求
+    if (cancelTokenSource.current) {
+      cancelTokenSource.current.cancel('Request canceled');
+    }
+
+    // 创建新的取消令牌
+    cancelTokenSource.current = axios.CancelToken.source();
+
+    try {
+      setState(prevState => ({ ...prevState, loading: true, error: null }));
+
+      const response: AxiosResponse<T> = await axiosInstance({
+        ...config,
+        cancelToken: cancelTokenSource.current.token,
+      });
+
+      // 缓存数据
+      if (cache) {
+        cacheData.current[cacheKey] = response.data;
+      }
+
+      setState({
+        data: response.data,
+        loading: false,
+        error: null,
+      });
+
+      // 调用成功回调
+      if (onSuccess) {
+        onSuccess(response.data);
+      }
+    } catch (error) {
+      if (axios.isCancel(error)) {
+        console.log('Request canceled', error.message);
+      } else {
+        setState({
+          data: null,
+          loading: false,
+          error: error as AxiosError,
+        });
+
+        // 调用失败回调
+        if (onError) {
+          onError(error as AxiosError);
+        }
+      }
+    }
+  }, [config, cache, onSuccess, onError, axiosInstance]);
+
+  // 组件挂载时自动发起请求（如果不是手动触发）
+  useEffect(() => {
+    if (!manual) {
+      fetchData();
+    }
+  }, [fetchData, manual]);
+
+  // 组件卸载时取消请求
+  useEffect(() => {
+    return () => {
+      if (cancelTokenSource.current) {
+        cancelTokenSource.current.cancel('Component unmounted');
+      }
+    };
+  }, []);
+
+  return {
+    ...state,
+    refetch: fetchData, // 手动触发请求
+  };
+}
+
+export default useAxios;
+```
+
+### 主要改动：
+1. **`axiosInstance` 参数**：在 `UseAxiosOptions` 中添加了一个 `axiosInstance` 参数，允许用户传入自定义的 `axios` 实例。如果未传入，则默认使用全局的 `axios` 实例。
+
+2. **使用自定义实例**：在 `fetchData` 函数中，使用传入的 `axiosInstance` 来发起请求，而不是直接使用全局的 `axios`。
+
+### 使用示例：
+```typescript
+import useAxios from './useAxios';
+import axios from 'axios';
+
+// 创建一个自定义的axios实例
+const customAxiosInstance = axios.create({
+  baseURL: 'https://api.example.com',
+  timeout: 5000,
+  headers: {
+    'Authorization': 'Bearer token'
+  }
+});
+
+function MyComponent() {
+  const { data, loading, error, refetch } = useAxios(
+    { url: '/data' },
+    { axiosInstance: customAxiosInstance }
+  );
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return (
+    <div>
+      <pre>{JSON.stringify(data, null, 2)}</pre>
+      <button onClick={refetch}>Refetch</button>
+    </div>
+  );
+}
+```
+
+通过这种方式，你可以灵活地使用自定义的 `axios` 实例来发起请求，同时保留 `useAxios` Hook 的所有功能。
