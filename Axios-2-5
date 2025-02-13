@@ -1,0 +1,264 @@
+你提到的错误是因为在自定义的 `axiosInstance` 中，`CancelToken` 和 `isCancel` 是 `axios` 的静态方法，而不是实例方法。我们需要直接从 `axios` 中导入这些方法，而不是从 `axiosInstance` 中调用。
+
+以下是修复后的完整代码：
+
+---
+
+### 1. **`axiosInstance.ts`** - 自定义 `axios` 实例
+
+```typescript
+// axiosInstance.ts
+import axios from 'axios';
+
+// 创建自定义 axios 实例
+const axiosInstance = axios.create({
+  baseURL: 'https://jsonplaceholder.typicode.com', // 设置基础URL
+  timeout: 10000, // 请求超时时间
+  headers: {
+    'Content-Type': 'application/json',
+    // 可以在这里添加其他默认请求头
+  },
+});
+
+// 请求拦截器
+axiosInstance.interceptors.request.use(
+  (config) => {
+    // 在发送请求之前做些什么
+    console.log('Request Interceptor:', config);
+    return config;
+  },
+  (error) => {
+    // 对请求错误做些什么
+    return Promise.reject(error);
+  }
+);
+
+// 响应拦截器
+axiosInstance.interceptors.response.use(
+  (response) => {
+    // 对响应数据做些什么
+    console.log('Response Interceptor:', response);
+    return response;
+  },
+  (error) => {
+    // 对响应错误做些什么
+    return Promise.reject(error);
+  }
+);
+
+export default axiosInstance;
+```
+
+---
+
+### 2. **`useAxios.ts`** - 使用自定义 `axios` 实例的 `useAxios` Hook
+
+```typescript
+// useAxios.ts
+import { useState, useEffect, useCallback, useRef } from 'react';
+import axiosInstance from './axiosInstance'; // 导入自定义 axios 实例
+import axios, { AxiosRequestConfig, AxiosResponse, AxiosError, CancelTokenSource } from 'axios'; // 导入 axios 的静态方法
+
+// 定义请求状态类型
+type RequestState<T> = {
+  data: T | null;
+  loading: boolean;
+  error: AxiosError | null;
+};
+
+// 定义 useAxios Hook 的配置选项
+type UseAxiosOptions<T> = {
+  manual?: boolean; // 是否手动触发请求
+  cache?: boolean; // 是否启用缓存
+  onSuccess?: (data: T) => void; // 请求成功回调
+  onError?: (error: AxiosError) => void; // 请求失败回调
+};
+
+// 定义 useAxios Hook
+function useAxios<T>(
+  config: AxiosRequestConfig,
+  options: UseAxiosOptions<T> = {}
+) {
+  const { manual = false, cache = false, onSuccess, onError } = options;
+
+  const [state, setState] = useState<RequestState<T>>({
+    data: null,
+    loading: !manual, // 如果手动触发，初始不加载
+    error: null,
+  });
+
+  const cacheData = useRef<{ [key: string]: T }>({}); // 缓存数据
+  const cancelTokenSource = useRef<CancelTokenSource | null>(null);
+
+  const fetchData = useCallback(async () => {
+    // 如果启用缓存且缓存中存在数据，则直接返回缓存数据
+    const cacheKey = JSON.stringify(config);
+    if (cache && cacheData.current[cacheKey]) {
+      setState({
+        data: cacheData.current[cacheKey],
+        loading: false,
+        error: null,
+      });
+      return;
+    }
+
+    // 取消之前的请求
+    if (cancelTokenSource.current) {
+      cancelTokenSource.current.cancel('Request canceled');
+    }
+
+    // 创建新的取消令牌
+    cancelTokenSource.current = axios.CancelToken.source(); // 使用 axios 的静态方法
+
+    try {
+      setState((prevState) => ({ ...prevState, loading: true, error: null }));
+
+      const response: AxiosResponse<T> = await axiosInstance({
+        ...config,
+        cancelToken: cancelTokenSource.current.token,
+      });
+
+      // 缓存数据
+      if (cache) {
+        cacheData.current[cacheKey] = response.data;
+      }
+
+      setState({
+        data: response.data,
+        loading: false,
+        error: null,
+      });
+
+      // 调用成功回调
+      if (onSuccess) {
+        onSuccess(response.data);
+      }
+    } catch (error) {
+      if (axios.isCancel(error)) { // 使用 axios 的静态方法
+        console.log('Request canceled', error.message);
+      } else {
+        setState({
+          data: null,
+          loading: false,
+          error: error as AxiosError,
+        });
+
+        // 调用失败回调
+        if (onError) {
+          onError(error as AxiosError);
+        }
+      }
+    }
+  }, [config, cache, onSuccess, onError]);
+
+  // 组件挂载时自动发起请求（如果不是手动触发）
+  useEffect(() => {
+    if (!manual) {
+      fetchData();
+    }
+  }, [fetchData, manual]);
+
+  // 组件卸载时取消请求
+  useEffect(() => {
+    return () => {
+      if (cancelTokenSource.current) {
+        cancelTokenSource.current.cancel('Component unmounted');
+      }
+    };
+  }, []);
+
+  return {
+    ...state,
+    refetch: fetchData, // 手动触发请求
+  };
+}
+
+export default useAxios;
+```
+
+---
+
+### 3. **使用示例** - 在组件中使用 `useAxios`
+
+```typescript
+import React from 'react';
+import useAxios from './useAxios';
+
+const MyComponent = () => {
+  const { data, loading, error, refetch } = useAxios({
+    url: '/posts/1', // 请求路径
+    method: 'GET', // 请求方法
+  });
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return (
+    <div>
+      <h1>{data?.title}</h1>
+      <p>{data?.body}</p>
+      <button onClick={refetch}>Refetch</button>
+    </div>
+  );
+};
+
+export default MyComponent;
+```
+
+---
+
+### 修复的关键点
+
+1. **`CancelToken` 和 `isCancel` 的调用**：
+   - `CancelToken` 和 `isCancel` 是 `axios` 的静态方法，而不是实例方法。
+   - 因此，我们需要直接从 `axios` 中导入这些方法，而不是从 `axiosInstance` 中调用。
+
+2. **代码调整**：
+   - 将 `axiosInstance.CancelToken` 改为 `axios.CancelToken`。
+   - 将 `axiosInstance.isCancel` 改为 `axios.isCancel`。
+
+---
+
+### 测试运行
+
+1. 确保安装了 `axios` 和 `react`：
+   ```bash
+   npm install axios react
+   ```
+
+2. 将上述代码分别保存为：
+   - `axiosInstance.ts`
+   - `useAxios.ts`
+   - `MyComponent.tsx`
+
+3. 在 `App.tsx` 中使用 `MyComponent`：
+   ```typescript
+   import React from 'react';
+   import MyComponent from './MyComponent';
+
+   const App = () => {
+     return (
+       <div>
+         <h1>My App</h1>
+         <MyComponent />
+       </div>
+     );
+   };
+
+   export default App;
+   ```
+
+4. 运行项目：
+   ```bash
+   npm start
+   ```
+
+---
+
+### 预期结果
+
+- 页面加载时会自动发起请求，显示数据。
+- 如果请求失败，会显示错误信息。
+- 点击 "Refetch" 按钮可以重新发起请求。
+
+如果还有其他问题，请随时告诉我！
