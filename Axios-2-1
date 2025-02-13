@@ -1,0 +1,221 @@
+在扩展 `axios` 实例时，我们可以创建一个自定义的 `axios` 实例，并将其与 `useAxios` Hook 结合使用。这样可以在全局范围内配置 `axios` 实例，例如设置默认的请求头、拦截器等。以下是如何扩展 `axios` 实例并将其与 `useAxios` 集成的示例：
+
+### 1. 创建自定义的 `axios` 实例
+
+首先，我们可以创建一个自定义的 `axios` 实例，并为其配置一些默认值或拦截器。
+
+```typescript
+// axiosInstance.ts
+import axios from 'axios';
+
+// 创建自定义的 axios 实例
+const axiosInstance = axios.create({
+  baseURL: 'https://api.example.com', // 设置基础URL
+  timeout: 10000, // 设置请求超时时间
+  headers: {
+    'Content-Type': 'application/json',
+    // 可以在这里添加其他默认请求头
+  },
+});
+
+// 添加请求拦截器
+axiosInstance.interceptors.request.use(
+  (config) => {
+    // 在发送请求之前做些什么
+    console.log('Request Interceptor:', config);
+    return config;
+  },
+  (error) => {
+    // 对请求错误做些什么
+    return Promise.reject(error);
+  }
+);
+
+// 添加响应拦截器
+axiosInstance.interceptors.response.use(
+  (response) => {
+    // 对响应数据做些什么
+    console.log('Response Interceptor:', response);
+    return response;
+  },
+  (error) => {
+    // 对响应错误做些什么
+    return Promise.reject(error);
+  }
+);
+
+export default axiosInstance;
+```
+
+### 2. 修改 `useAxios` 以支持自定义 `axios` 实例
+
+接下来，我们可以修改 `useAxios` Hook，使其能够接受一个自定义的 `axios` 实例作为参数。
+
+```typescript
+// useAxios.ts
+import { useState, useEffect, useCallback, useRef } from 'react';
+import axios, { AxiosRequestConfig, AxiosResponse, AxiosError, CancelTokenSource } from 'axios';
+import axiosInstance from './axiosInstance'; // 导入自定义的 axios 实例
+
+// 定义请求状态类型
+type RequestState<T> = {
+  data: T | null;
+  loading: boolean;
+  error: AxiosError | null;
+};
+
+// 定义useAxios Hook的配置选项
+type UseAxiosOptions<T> = {
+  manual?: boolean; // 是否手动触发请求
+  cache?: boolean; // 是否启用缓存
+  onSuccess?: (data: T) => void; // 请求成功回调
+  onError?: (error: AxiosError) => void; // 请求失败回调
+  axiosInstance?: typeof axiosInstance; // 自定义 axios 实例
+};
+
+// 定义useAxios Hook
+function useAxios<T>(
+  config: AxiosRequestConfig,
+  options: UseAxiosOptions<T> = {}
+) {
+  const { manual = false, cache = false, onSuccess, onError, axiosInstance: customAxiosInstance = axiosInstance } = options;
+
+  const [state, setState] = useState<RequestState<T>>({
+    data: null,
+    loading: !manual, // 如果手动触发，初始不加载
+    error: null,
+  });
+
+  const cacheData = useRef<{ [key: string]: T }>({}); // 缓存数据
+  const cancelTokenSource = useRef<CancelTokenSource | null>(null);
+
+  const fetchData = useCallback(async () => {
+    // 如果启用缓存且缓存中存在数据，则直接返回缓存数据
+    const cacheKey = JSON.stringify(config);
+    if (cache && cacheData.current[cacheKey]) {
+      setState({
+        data: cacheData.current[cacheKey],
+        loading: false,
+        error: null,
+      });
+      return;
+    }
+
+    // 取消之前的请求
+    if (cancelTokenSource.current) {
+      cancelTokenSource.current.cancel('Request canceled');
+    }
+
+    // 创建新的取消令牌
+    cancelTokenSource.current = customAxiosInstance.CancelToken.source();
+
+    try {
+      setState(prevState => ({ ...prevState, loading: true, error: null }));
+
+      const response: AxiosResponse<T> = await customAxiosInstance({
+        ...config,
+        cancelToken: cancelTokenSource.current.token,
+      });
+
+      // 缓存数据
+      if (cache) {
+        cacheData.current[cacheKey] = response.data;
+      }
+
+      setState({
+        data: response.data,
+        loading: false,
+        error: null,
+      });
+
+      // 调用成功回调
+      if (onSuccess) {
+        onSuccess(response.data);
+      }
+    } catch (error) {
+      if (axios.isCancel(error)) {
+        console.log('Request canceled', error.message);
+      } else {
+        setState({
+          data: null,
+          loading: false,
+          error: error as AxiosError,
+        });
+
+        // 调用失败回调
+        if (onError) {
+          onError(error as AxiosError);
+        }
+      }
+    }
+  }, [config, cache, onSuccess, onError, customAxiosInstance]);
+
+  // 组件挂载时自动发起请求（如果不是手动触发）
+  useEffect(() => {
+    if (!manual) {
+      fetchData();
+    }
+  }, [fetchData, manual]);
+
+  // 组件卸载时取消请求
+  useEffect(() => {
+    return () => {
+      if (cancelTokenSource.current) {
+        cancelTokenSource.current.cancel('Component unmounted');
+      }
+    };
+  }, []);
+
+  return {
+    ...state,
+    refetch: fetchData, // 手动触发请求
+  };
+}
+
+export default useAxios;
+```
+
+### 3. 使用自定义 `axios` 实例的 `useAxios`
+
+现在，你可以在使用 `useAxios` 时传入自定义的 `axios` 实例：
+
+```typescript
+import React from 'react';
+import useAxios from './useAxios';
+import axiosInstance from './axiosInstance';
+
+const MyComponent = () => {
+  const { data, loading, error, refetch } = useAxios(
+    {
+      url: '/users',
+      method: 'GET',
+    },
+    {
+      axiosInstance, // 使用自定义的 axios 实例
+      onSuccess: (data) => {
+        console.log('Data fetched successfully:', data);
+      },
+      onError: (error) => {
+        console.error('Error fetching data:', error);
+      },
+    }
+  );
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return (
+    <div>
+      <h1>Users</h1>
+      <pre>{JSON.stringify(data, null, 2)}</pre>
+      <button onClick={refetch}>Refetch</button>
+    </div>
+  );
+};
+
+export default MyComponent;
+```
+
+### 总结
+
+通过这种方式，你可以轻松地扩展 `axios` 实例，并在 `useAxios` Hook 中使用它。这样可以更好地管理全局的请求配置和拦截器，同时保持代码的模块化和可维护性。
