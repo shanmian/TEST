@@ -1,0 +1,585 @@
+以下是将 `Axios` 实例单独抽离到另一个文件的实现方式。我们将创建一个独立的文件来管理 `axios` 实例和拦截器，然后在 `useAxios` 钩子中引用该实例。
+
+---
+
+### 1. 创建独立的 `axios` 实例文件
+
+#### `axiosInstance.ts`
+
+```typescript
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
+
+// 创建 axios 实例
+const axiosInstance: AxiosInstance = axios.create({
+  baseURL: 'https://api.example.com', // 基础 URL
+  timeout: 10000, // 超时时间
+  headers: { 'Content-Type': 'application/json' }, // 默认请求头
+});
+
+// 请求拦截器
+axiosInstance.interceptors.request.use(
+  (config: AxiosRequestConfig) => {
+    console.log('Request Interceptor - Sending Request:', config);
+    // 可以在这里添加全局逻辑，比如添加认证 token
+    // const token = localStorage.getItem('token');
+    // if (token) {
+    //   config.headers.Authorization = `Bearer ${token}`;
+    // }
+    return config;
+  },
+  (error: AxiosError) => {
+    console.error('Request Interceptor - Error:', error);
+    return Promise.reject(error);
+  }
+);
+
+// 响应拦截器
+axiosInstance.interceptors.response.use(
+  (response: AxiosResponse) => {
+    console.log('Response Interceptor - Received Response:', response);
+    // 可以在这里统一处理响应数据
+    return response;
+  },
+  (error: AxiosError) => {
+    console.error('Response Interceptor - Error:', error);
+    // 统一处理错误
+    if (error.response) {
+      switch (error.response.status) {
+        case 401:
+          console.error('Unauthorized - Redirect to login');
+          break;
+        case 404:
+          console.error('Resource not found');
+          break;
+        case 500:
+          console.error('Server error');
+          break;
+        default:
+          console.error('Unknown error');
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default axiosInstance;
+```
+
+---
+
+### 2. 在 `useAxios` 钩子中使用 `axiosInstance`
+
+#### `useAxios.ts`
+
+```typescript
+import { useState, useCallback, useEffect, useRef } from 'react';
+import axiosInstance from './axiosInstance';
+import { AxiosRequestConfig, AxiosError } from 'axios';
+
+type UseAxiosProps<T> = {
+  config?: AxiosRequestConfig;
+  immediate?: boolean;
+  onSuccess?: (data: T) => void;
+  onError?: (error: AxiosError) => void;
+  cacheKey?: string; // 缓存键名
+  cacheDuration?: number; // 缓存时间（毫秒）
+};
+
+type UseAxiosReturn<T> = {
+  data: T | null;
+  loading: boolean;
+  error: AxiosError | null;
+  execute: (executionConfig?: AxiosRequestConfig) => Promise<void>;
+  cancel: () => void; // 取消请求的方法
+};
+
+// 缓存存储
+const cacheStore: Record<string, { data: any; timestamp: number }> = {};
+
+export function useAxios<T = any>({
+  config = {},
+  immediate = false,
+  onSuccess,
+  onError,
+  cacheKey,
+  cacheDuration = 30000, // 默认缓存 30 秒
+}: UseAxiosProps<T> = {}): UseAxiosReturn<T> {
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<AxiosError | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // 检查缓存是否有效
+  const isCacheValid = (key: string): boolean => {
+    const cache = cacheStore[key];
+    if (!cache) return false;
+    return Date.now() - cache.timestamp < cacheDuration;
+  };
+
+  const execute = useCallback(
+    async (executionConfig?: AxiosRequestConfig) => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // 如果有缓存且缓存有效，直接使用缓存数据
+        if (cacheKey && isCacheValid(cacheKey)) {
+          setData(cacheStore[cacheKey].data);
+          onSuccess?.(cacheStore[cacheKey].data);
+          return;
+        }
+
+        // 创建 AbortController
+        abortControllerRef.current = new AbortController();
+        const mergedConfig = {
+          ...config,
+          ...executionConfig,
+          signal: abortControllerRef.current.signal, // 绑定 signal
+        };
+
+        const response = await axiosInstance.request<T>(mergedConfig);
+
+        setData(response.data);
+        onSuccess?.(response.data);
+
+        // 如果有缓存键名，存储缓存数据
+        if (cacheKey) {
+          cacheStore[cacheKey] = {
+            data: response.data,
+            timestamp: Date.now(),
+          };
+        }
+      } catch (err) {
+        if (!axiosInstance.isCancel(err)) {
+          const axiosError = err as AxiosError;
+          setError(axiosError);
+          onError?.(axiosError);
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [config, onSuccess, onError, cacheKey]
+  );
+
+  // 取消请求的方法
+  const cancel = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort('Request canceled by the user.');
+    }
+  }, []);
+
+  // 组件卸载时取消请求
+  useEffect(() => {
+    return () => {
+      cancel();
+    };
+  }, [cancel]);
+
+  // 立即执行的逻辑
+  useEffect(() => {
+    if (immediate) {
+      execute();
+    }
+  }, [execute, immediate]);
+
+  return { data, loading, error, execute, cancel };
+}
+```
+
+---
+
+### 3. 使用示例
+
+#### `UserList.tsx`
+
+```tsx
+import React from 'react';
+import { useAxios } from './useAxios';
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+function UserList() {
+  const { data, loading, error, execute } = useAxios<User[]>({
+    config: {
+      url: '/users',
+      method: 'GET',
+    },
+    immediate: true,
+    onSuccess: (data) => console.log('Users loaded:', data),
+    onError: (error) => console.error('Error loading users:', error),
+  });
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return (
+    <div>
+      <h2>User List</h2>
+      <button onClick={() => execute()}>Refresh</button>
+      <ul>
+        {data?.map((user) => (
+          <li key={user.id}>
+            {user.name} - {user.email}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export default UserList;
+```
+
+#### `CreateUser.tsx`
+
+```tsx
+import React, { useState } from 'react';
+import { useAxios } from './useAxios';
+
+function CreateUser() {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+
+  const { loading, error, execute } = useAxios({
+    config: {
+      url: '/users',
+      method: 'POST',
+    },
+    onSuccess: (data) => {
+      console.log('User created:', data);
+      setName('');
+      setEmail('');
+    },
+    onError: (error) => console.error('Error creating user:', error),
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    execute({
+      data: { name, email },
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <h2>Create User</h2>
+      {error && <div style={{ color: 'red' }}>{error.message}</div>}
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Name"
+      />
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Email"
+      />
+      <button type="submit" disabled={loading}>
+        {loading ? 'Submitting...' : 'Submit'}
+      </button>
+    </form>
+  );
+}
+
+export default CreateUser;
+```
+
+---
+
+### 优点
+
+1. **模块化**：
+   - `axios` 实例和拦截器逻辑单独抽离，便于维护和扩展。
+
+2. **复用性**：
+   - 可以在项目的任何地方使用 `axiosInstance`，确保全局配置一致。
+
+3. **可测试性**：
+   - 独立的 `axios` 实例文件可以单独测试，提高代码质量。
+
+4. **灵活性**：
+   - 可以根据需要创建多个 `axios` 实例，分别用于不同的 API 服务。
+
+---
+
+### 扩展建议
+
+1. **动态配置**：
+   - 在 `axiosInstance` 中添加动态配置逻辑（如动态 token）。
+
+2. **多实例支持**：
+   - 如果需要对接多个 API 服务，可以创建多个 `axios` 实例。
+
+3. **环境变量**：
+   - 使用环境变量管理 `baseURL` 和其他配置，适应不同环境（开发、测试、生产）。
+
+
+
+--------------
+在项目中，通常会将所有 API 请求集中到一个 `api` 文件夹下统一管理。这样可以提高代码的可维护性和复用性。以下是基于上面封装的 `useAxios` 的示例，展示如何将 API 请求集中管理。
+
+---
+
+### 1. 创建 `api` 文件夹结构
+
+```
+src/
+├── api/
+│   ├── userApi.ts       # 用户相关 API
+│   ├── postApi.ts       # 文章相关 API
+│   └── index.ts         # 统一导出所有 API
+├── hooks/
+│   └── useAxios.ts      # 封装的 useAxios 钩子
+└── components/
+    ├── UserList.tsx     # 用户列表组件
+    └── CreateUser.tsx   # 创建用户组件
+```
+
+---
+
+### 2. 实现 `userApi.ts`
+
+#### `api/userApi.ts`
+
+```typescript
+import { useAxios } from '../hooks/useAxios';
+
+// 获取用户列表
+export const useFetchUsers = () => {
+  return useAxios<{ id: number; name: string; email: string }[]>({
+    config: {
+      url: '/users',
+      method: 'GET',
+    },
+    immediate: true, // 立即执行
+    onSuccess: (data) => console.log('Users loaded:', data),
+    onError: (error) => console.error('Error loading users:', error),
+  });
+};
+
+// 创建用户
+export const useCreateUser = () => {
+  return useAxios({
+    config: {
+      url: '/users',
+      method: 'POST',
+    },
+    onSuccess: (data) => console.log('User created:', data),
+    onError: (error) => console.error('Error creating user:', error),
+  });
+};
+
+// 更新用户
+export const useUpdateUser = (userId: number) => {
+  return useAxios({
+    config: {
+      url: `/users/${userId}`,
+      method: 'PUT',
+    },
+    onSuccess: (data) => console.log('User updated:', data),
+    onError: (error) => console.error('Error updating user:', error),
+  });
+};
+
+// 删除用户
+export const useDeleteUser = (userId: number) => {
+  return useAxios({
+    config: {
+      url: `/users/${userId}`,
+      method: 'DELETE',
+    },
+    onSuccess: (data) => console.log('User deleted:', data),
+    onError: (error) => console.error('Error deleting user:', error),
+  });
+};
+```
+
+---
+
+### 3. 实现 `postApi.ts`
+
+#### `api/postApi.ts`
+
+```typescript
+import { useAxios } from '../hooks/useAxios';
+
+// 获取文章列表
+export const useFetchPosts = () => {
+  return useAxios<{ id: number; title: string; body: string }[]>({
+    config: {
+      url: '/posts',
+      method: 'GET',
+    },
+    immediate: true,
+    onSuccess: (data) => console.log('Posts loaded:', data),
+    onError: (error) => console.error('Error loading posts:', error),
+  });
+};
+
+// 创建文章
+export const useCreatePost = () => {
+  return useAxios({
+    config: {
+      url: '/posts',
+      method: 'POST',
+    },
+    onSuccess: (data) => console.log('Post created:', data),
+    onError: (error) => console.error('Error creating post:', error),
+  });
+};
+```
+
+---
+
+### 4. 统一导出 API
+
+#### `api/index.ts`
+
+```typescript
+export * from './userApi';
+export * from './postApi';
+```
+
+---
+
+### 5. 在组件中使用 API
+
+#### `components/UserList.tsx`
+
+```tsx
+import React from 'react';
+import { useFetchUsers } from '../api/userApi';
+
+function UserList() {
+  const { data: users, loading, error, execute } = useFetchUsers();
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return (
+    <div>
+      <h2>User List</h2>
+      <button onClick={() => execute()}>Refresh</button>
+      <ul>
+        {users?.map((user) => (
+          <li key={user.id}>
+            {user.name} - {user.email}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export default UserList;
+```
+
+#### `components/CreateUser.tsx`
+
+```tsx
+import React, { useState } from 'react';
+import { useCreateUser } from '../api/userApi';
+
+function CreateUser() {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+
+  const { loading, error, execute } = useCreateUser();
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    execute({
+      data: { name, email },
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <h2>Create User</h2>
+      {error && <div style={{ color: 'red' }}>{error.message}</div>}
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Name"
+      />
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Email"
+      />
+      <button type="submit" disabled={loading}>
+        {loading ? 'Submitting...' : 'Submit'}
+      </button>
+    </form>
+  );
+}
+
+export default CreateUser;
+```
+
+---
+
+### 6. 在 `App.tsx` 中使用组件
+
+#### `App.tsx`
+
+```tsx
+import React from 'react';
+import UserList from './components/UserList';
+import CreateUser from './components/CreateUser';
+
+function App() {
+  return (
+    <div>
+      <h1>User Management</h1>
+      <CreateUser />
+      <UserList />
+    </div>
+  );
+}
+
+export default App;
+```
+
+---
+
+### 优点
+
+1. **集中管理**：
+   - 所有 API 请求集中在 `api` 文件夹下，便于维护和查找。
+
+2. **高复用性**：
+   - 封装好的 API 可以在多个组件中复用，减少重复代码。
+
+3. **逻辑分离**：
+   - API 请求逻辑与组件逻辑分离，提高代码可读性和可维护性。
+
+4. **类型安全**：
+   - 使用 TypeScript 泛型，确保请求和响应的数据类型安全。
+
+---
+
+### 扩展建议
+
+1. **分页支持**：
+   - 在 `useFetchUsers` 和 `useFetchPosts` 中添加分页参数。
+
+2. **搜索和过滤**：
+   - 在 API 请求中添加搜索和过滤参数。
+
+3. **缓存优化**：
+   - 在 `useAxios` 中进一步优化缓存逻辑，支持分页缓存。
+
+4. **全局错误处理**：
+   - 在拦截器中统一处理错误，避免在每个 API 中重复编写错误处理逻辑。
+
+通过这种方式，项目中的 API 请求可以更加规范和高效地管理。
