@@ -1,0 +1,105 @@
+好的，下面是一个使用 TypeScript 封装的 MUI（Material-UI）组件，该组件可以根据传入的参数显示饼图（Pie）或柱状图（Bars）。我们将使用 `@mui/x-charts` 库来绘制图表。
+
+首先，确保你已经安装了 `@mui/x-charts` 和 `@mui/material`：
+
+```bash
+npm install @mui/x-charts @mui/material
+```
+
+然后，我们可以创建一个名为 `ChartComponent` 的组件，它接受一个 `type` 参数来决定显示饼图还是柱状图。
+
+```tsx
+import React from 'react';
+import { PieChart, BarChart } from '@mui/x-charts';
+import { PieSeriesType, BarSeriesType } from '@mui/x-charts/models/seriesType';
+
+interface ChartComponentProps {
+  type: 'pie' | 'bar';
+  data: { label: string; value: number }[];
+  width?: number;
+  height?: number;
+}
+
+const ChartComponent: React.FC<ChartComponentProps> = ({ type, data, width = 500, height = 300 }) => {
+  if (type === 'pie') {
+    const pieSeries: PieSeriesType[] = [
+      {
+        data: data.map((item, index) => ({ id: index, value: item.value, label: item.label })),
+      },
+    ];
+
+    return (
+      <PieChart
+        series={pieSeries}
+        width={width}
+        height={height}
+      />
+    );
+  } else if (type === 'bar') {
+    const barSeries: BarSeriesType[] = [
+      {
+        data: data.map((item) => item.value),
+      },
+    ];
+
+    return (
+      <BarChart
+        xAxis={[{ scaleType: 'band', data: data.map((item) => item.label) }]}
+        series={barSeries}
+        width={width}
+        height={height}
+      />
+    );
+  }
+
+  return null;
+};
+
+export default ChartComponent;
+```
+
+### 使用示例
+
+```tsx
+import React from 'react';
+import ChartComponent from './ChartComponent';
+
+const App: React.FC = () => {
+  const data = [
+    { label: 'Category A', value: 40 },
+    { label: 'Category B', value: 30 },
+    { label: 'Category C', value: 20 },
+    { label: 'Category D', value: 10 },
+  ];
+
+  return (
+    <div>
+      <h1>Pie Chart</h1>
+      <ChartComponent type="pie" data={data} />
+
+      <h1>Bar Chart</h1>
+      <ChartComponent type="bar" data={data} />
+    </div>
+  );
+};
+
+export default App;
+```
+
+### 解释
+
+1. **`ChartComponentProps` 接口**：定义了组件的 props，包括 `type`（决定显示饼图还是柱状图）、`data`（图表数据）、`width` 和 `height`（图表的宽度和高度）。
+
+2. **`PieSeriesType` 和 `BarSeriesType`**：这些是 `@mui/x-charts` 提供的类型，用于定义饼图和柱状图的数据系列。
+
+3. **`PieChart` 和 `BarChart`**：根据 `type` 参数的不同，渲染相应的图表组件。
+
+4. **`data` 结构**：数据是一个包含 `label` 和 `value` 的对象数组，`label` 用于显示类别，`value` 用于显示对应的值。
+
+### 注意事项
+
+- 确保你已经正确安装了 `@mui/x-charts` 和 `@mui/material`。
+- 你可以根据需要调整图表的宽度和高度。
+- 如果你需要更复杂的图表配置，可以参考 `@mui/x-charts` 的官方文档。
+
+希望这个封装能满足你的需求！如果有任何问题或需要进一步的帮助，请告诉我。
