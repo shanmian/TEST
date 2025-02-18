@@ -1,0 +1,144 @@
+好的，我们可以扩展 `ChartComponent` 组件，使其支持点击事件。当用户点击图表的某个部分时，可以触发一个回调函数，并返回点击的数据（例如，饼图的某个扇区或柱状图的某个柱子）。
+
+以下是扩展后的代码：
+
+### 扩展后的 `ChartComponent`
+
+```tsx
+import React from 'react';
+import { PieChart, BarChart } from '@mui/x-charts';
+import { PieSeriesType, BarSeriesType } from '@mui/x-charts/models/seriesType';
+
+interface ChartComponentProps {
+  type: 'pie' | 'bar';
+  data: { label: string; value: number }[];
+  width?: number;
+  height?: number;
+  onItemClick?: (item: { label: string; value: number }) => void; // 新增点击事件回调
+}
+
+const ChartComponent: React.FC<ChartComponentProps> = ({
+  type,
+  data,
+  width = 500,
+  height = 300,
+  onItemClick,
+}) => {
+  // 处理饼图点击事件
+  const handlePieClick = (event: React.MouseEvent, itemIdentifier: any) => {
+    if (onItemClick) {
+      const clickedItem = data.find((_, index) => index === itemIdentifier.id);
+      if (clickedItem) {
+        onItemClick(clickedItem);
+      }
+    }
+  };
+
+  // 处理柱状图点击事件
+  const handleBarClick = (event: React.MouseEvent, itemIdentifier: any) => {
+    if (onItemClick) {
+      const clickedItem = data[itemIdentifier.dataIndex];
+      if (clickedItem) {
+        onItemClick(clickedItem);
+      }
+    }
+  };
+
+  if (type === 'pie') {
+    const pieSeries: PieSeriesType[] = [
+      {
+        data: data.map((item, index) => ({ id: index, value: item.value, label: item.label })),
+      },
+    ];
+
+    return (
+      <PieChart
+        series={pieSeries}
+        width={width}
+        height={height}
+        onClick={handlePieClick} // 绑定点击事件
+      />
+    );
+  } else if (type === 'bar') {
+    const barSeries: BarSeriesType[] = [
+      {
+        data: data.map((item) => item.value),
+      },
+    ];
+
+    return (
+      <BarChart
+        xAxis={[{ scaleType: 'band', data: data.map((item) => item.label) }]}
+        series={barSeries}
+        width={width}
+        height={height}
+        onClick={handleBarClick} // 绑定点击事件
+      />
+    );
+  }
+
+  return null;
+};
+
+export default ChartComponent;
+```
+
+### 使用示例
+
+```tsx
+import React from 'react';
+import ChartComponent from './ChartComponent';
+
+const App: React.FC = () => {
+  const data = [
+    { label: 'Category A', value: 40 },
+    { label: 'Category B', value: 30 },
+    { label: 'Category C', value: 20 },
+    { label: 'Category D', value: 10 },
+  ];
+
+  const handleItemClick = (item: { label: string; value: number }) => {
+    console.log('Clicked Item:', item);
+    alert(`You clicked on ${item.label} with value ${item.value}`);
+  };
+
+  return (
+    <div>
+      <h1>Pie Chart</h1>
+      <ChartComponent type="pie" data={data} onItemClick={handleItemClick} />
+
+      <h1>Bar Chart</h1>
+      <ChartComponent type="bar" data={data} onItemClick={handleItemClick} />
+    </div>
+  );
+};
+
+export default App;
+```
+
+### 解释
+
+1. **新增 `onItemClick` 属性**：
+   - 这是一个可选的回调函数，当用户点击图表的某个部分时触发。
+   - 回调函数会返回点击的项（`label` 和 `value`）。
+
+2. **处理点击事件**：
+   - 对于饼图，使用 `PieChart` 的 `onClick` 事件，通过 `itemIdentifier.id` 找到点击的项。
+   - 对于柱状图，使用 `BarChart` 的 `onClick` 事件，通过 `itemIdentifier.dataIndex` 找到点击的项。
+
+3. **触发回调**：
+   - 当用户点击图表时，找到对应的数据项并调用 `onItemClick` 回调函数。
+
+4. **使用示例**：
+   - 在 `App` 组件中，定义了一个 `handleItemClick` 函数，用于处理点击事件并显示点击的项。
+
+### 运行效果
+
+- 当用户点击饼图的某个扇区或柱状图的某个柱子时，控制台会打印点击的项，并弹出一个提示框显示点击的 `label` 和 `value`。
+
+### 注意事项
+
+- 确保 `@mui/x-charts` 的版本支持 `onClick` 事件。
+- 如果需要更复杂的交互（如悬停提示），可以进一步扩展组件。
+
+希望这个扩展能满足你的需求！如果有其他问题，欢迎随时提问。
