@@ -1,0 +1,95 @@
+import { useState } from 'react';
+import { PieChart } from '@mui/x-charts/PieChart';
+import { Checkbox, FormControlLabel, Paper, Stack } from '@mui/material';
+import type { PieSeriesType, HighlightChangeParams, ItemIdentifier } from '@mui/x-charts';
+
+interface PieData {
+  id: string;
+  label: string;
+  value: number;
+  color: string;
+}
+
+const data: PieData[] = [
+  { id: '0', label: 'Item 0', value: 15, color: '#1976d2' },
+  { id: '1', label: 'Item 1', value: 20, color: '#d32f2f' },
+  { id: '2', label: 'Item 2', value: 35, color: '#388e3c' },
+  { id: '3', label: 'Item 3', value: 25, color: '#ffa000' },
+  { id: '4', label: 'Item 4', value: 5, color: '#7b1fa2' }
+];
+
+const ControlledPieHighlight = () => {
+  // 改为存储 dataIndex 的数值集合
+  const [highlightedItems, setHighlightedItems] = useState<Set<number>>(new Set());
+
+  const handleHighlightChange = (dataIndex: number) => 
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const newHighlighted = new Set(highlightedItems);
+      event.target.checked ? newHighlighted.add(dataIndex) : newHighlighted.delete(dataIndex);
+      setHighlightedItems(newHighlighted);
+    };
+
+  const series: PieSeriesType[] = [{
+    type: 'pie',
+    data: data.map((item, index) => ({
+      ...item,
+      id: index, // 确保数据项使用数值索引作为 ID
+      emphasis: {
+        itemStyle: {
+          shadowBlur: 20,
+          shadowOffsetX: 2,
+          shadowColor: 'rgba(0,0,0,0.3)',
+          scale: true,
+          scaleSize: 1.1
+        }
+      }
+    })),
+    highlighted: { itemStyle: { opacity: 1 } },
+    faded: { itemStyle: { opacity: 0.3 } }
+  }];
+
+  // 转换为符合类型要求的格式
+  const highlightedIdentifiers: ItemIdentifier[] = 
+    Array.from(highlightedItems).map(dataIndex => ({ dataIndex }));
+
+  return (
+    <Stack direction="row" spacing={4} alignItems="flex-start">
+      <Paper sx={{ p: 2, minWidth: 200 }}>
+        <h3>Series A</h3>
+        {data.map((item, index) => (
+          <FormControlLabel
+            key={item.id}
+            control={
+              <Checkbox
+                checked={highlightedItems.has(index)}
+                onChange={handleHighlightChange(index)}
+                color="primary"
+              />
+            }
+            label={item.label}
+          />
+        ))}
+      </Paper>
+
+      <PieChart
+        series={series}
+        slotProps={{ legend: { hidden: true }}
+        width={500}
+        height={300}
+        highlightedItem={highlightedIdentifiers}
+        onHighlightChange={(params: HighlightChangeParams) => {
+          if (params.type === 'pie' && params.dataIndex !== undefined) {
+            const newHighlighted = new Set(highlightedItems);
+            const dataIndex = params.dataIndex;
+            newHighlighted.has(dataIndex) 
+              ? newHighlighted.delete(dataIndex) 
+              : newHighlighted.add(dataIndex);
+            setHighlightedItems(newHighlighted);
+          }
+        }}
+      />
+    </Stack>
+  );
+};
+
+export default ControlledPieHighlight;
