@@ -1,0 +1,102 @@
+import { useState } from 'react';
+import { PieChart } from '@mui/x-charts/PieChart';
+import { Checkbox, FormControlLabel, Paper, Stack } from '@mui/material';
+import type { PieSeriesType, HighlightChangeParams } from '@mui/x-charts';
+
+// 数据类型定义
+interface PieData {
+  id: string;
+  label: string;
+  value: number;
+  color: string;
+}
+
+// 初始数据配置
+const data: PieData[] = [
+  { id: '0', label: 'Item 0', value: 15, color: '#1976d2' },
+  { id: '1', label: 'Item 1', value: 20, color: '#d32f2f' },
+  { id: '2', label: 'Item 2', value: 35, color: '#388e3c' },
+  { id: '3', label: 'Item 3', value: 25, color: '#ffa000' },
+  { id: '4', label: 'Item 4', value: 5, color: '#7b1fa2' }
+];
+
+const ControlledPieHighlight = () => {
+  // 高亮状态管理
+  const [highlightedItems, setHighlightedItems] = useState<Set<string>>(new Set());
+
+  // 处理复选框变化
+  const handleHighlightChange = (itemId: string) => 
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const newHighlighted = new Set(highlightedItems);
+      event.target.checked ? newHighlighted.add(itemId) : newHighlighted.delete(itemId);
+      setHighlightedItems(newHighlighted);
+    };
+
+  // 动态生成系列配置
+  const series: PieSeriesType[] = [{
+    type: 'pie',
+    data: data.map(item => ({
+      ...item,
+      emphasis: {
+        itemStyle: {
+          shadowBlur: 20,
+          shadowOffsetX: 2,
+          shadowColor: 'rgba(0,0,0,0.3)',
+          scale: true,
+          scaleSize: 1.1
+        }
+      }
+    })),
+    highlighted: {
+      itemStyle: {
+        opacity: 1,
+      }
+    },
+    faded: { 
+      itemStyle: {
+        opacity: 0.3
+      }
+    }
+  }];
+
+  return (
+    <Stack direction="row" spacing={4} alignItems="flex-start">
+      <Paper sx={{ p: 2, minWidth: 200 }}>
+        <h3>Series A</h3>
+        {data.map((item) => (
+          <FormControlLabel
+            key={item.id}
+            control={
+              <Checkbox
+                checked={highlightedItems.has(item.id)}
+                onChange={handleHighlightChange(item.id)}
+                color="primary"
+              />
+            }
+            label={`Item ${item.id}`}
+          />
+        ))}
+      </Paper>
+
+      <PieChart
+        series={series}
+        slotProps={{
+          legend: { hidden: true }
+        }}
+        width={500}
+        height={300}
+        highlightedItem={Array.from(highlightedItems)}
+        onHighlightChange={(params: HighlightChangeParams) => {
+          if (params.type === 'pie' && params.dataIndex !== undefined) {
+            const newHighlighted = new Set(highlightedItems);
+            const itemId = data[params.dataIndex].id;
+            newHighlighted.has(itemId) ? newHighlighted.delete(itemId) : newHighlighted.add(itemId);
+            setHighlightedItems(newHighlighted);
+          }
+        }}
+      />
+    </Stack>
+  );
+};
+
+export default ControlledPieHighlight;
