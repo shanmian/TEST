@@ -1,0 +1,55 @@
+要根据 `a1` 数组中的元素从 `a2` 对象中过滤出包含这些元素的部分，可以编写一个 JavaScript 函数来实现。假设 `a2` 的结构是 `{ Data: { key_1: { a: {}, b: {}, c: {}, d: {} } } }`，我们可以遍历 `a1` 数组，并检查 `a2.Data.key_1` 中是否存在对应的键。
+
+以下是实现代码：
+
+```javascript
+const a1 = ["a", "b", "c"];
+const a2 = {
+  Data: {
+    key_1: {
+      a: {},
+      b: {},
+      c: {},
+      d: {}
+    }
+  }
+};
+
+function filterByA1(a1, a2) {
+  const result = {};
+  const key_1 = a2.Data.key_1;
+
+  a1.forEach(item => {
+    if (key_1[item]) {
+      result[item] = key_1[item];
+    }
+  });
+
+  return { Data: { key_1: result } };
+}
+
+const filteredResult = filterByA1(a1, a2);
+console.log(filteredResult);
+```
+
+### 解释：
+1. **`a1`** 是一个数组，包含需要过滤的键。
+2. **`a2`** 是一个对象，其中 `Data.key_1` 包含多个键值对。
+3. **`filterByA1`** 函数遍历 `a1` 数组，并检查 `a2.Data.key_1` 中是否存在对应的键。
+4. 如果存在，则将该键值对添加到 `result` 对象中。
+5. 最后返回一个新的对象，包含过滤后的结果。
+
+### 输出：
+```javascript
+{
+  Data: {
+    key_1: {
+      a: {},
+      b: {},
+      c: {}
+    }
+  }
+}
+```
+
+这个输出表示 `a2` 中只保留了 `a1` 数组中包含的键 `a`、`b` 和 `c`。
