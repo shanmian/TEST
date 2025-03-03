@@ -1,0 +1,114 @@
+import React, { useState, useMemo } from 'react';
+import { DataGrid } from '@mui/x-data-grid';
+
+// 树形结构数据示例
+const treeData = [
+  {
+    id: 1,
+    name: 'Parent',
+    children: [
+      {
+        id: 2,
+        name: 'Child 1',
+        children: [{ id: 4, name: 'Grandchild' }],
+      },
+      { id: 3, name: 'Child 2' },
+    ],
+  },
+];
+
+// 将树形数据转换为平铺结构
+function flattenTreeData(nodes, parentId = null, depth = 0) {
+  let result = [];
+  nodes.forEach((node) => {
+    const { children, ...rest } = node;
+    result.push({ ...rest, parentId, depth, hasChildren: !!children?.length });
+    if (children) {
+      result = result.concat(flattenTreeData(children, node.id, depth + 1));
+    }
+  });
+  return result;
+}
+
+// 生成平铺数据
+const flattenedData = flattenTreeData(treeData);
+
+export default function TreeDataGrid() {
+  const [expandedIds, setExpandedIds] = useState(new Set());
+
+  // 判断行是否可见（所有祖先节点均已展开）
+  const isVisible = (row) => {
+    let currentId = row.parentId;
+    while (currentId !== null) {
+      if (!expandedIds.has(currentId)) return false;
+      const parentRow = flattenedData.find((r) => r.id === currentId);
+      currentId = parentRow ? parentRow.parentId : null;
+    }
+    return true;
+  };
+
+  // 计算可见行数据
+  const visibleRows = useMemo(
+    () => flattenedData.filter((row) => isVisible(row)),
+    [expandedIds]
+  );
+
+  // 切换展开/折叠状态
+  const toggleExpanded = (id) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // 列定义
+  const columns = [
+    {
+      field: 'name',
+      headerName: 'Name',
+      width: 300,
+      renderCell: (params) => {
+        const { hasChildren, depth } = params.row;
+        return (
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ paddingLeft: depth * 24 }}>
+              {hasChildren && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleExpanded(params.row.id);
+                  }}
+                  style={{
+                    marginRight: 8,
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {expandedIds.has(params.row.id) ? '−' : '+'}
+                </button>
+              )}
+              <span>{params.row.name}</span>
+            </div>
+          </div>
+        );
+      },
+    },
+  ];
+
+  return (
+    <div style={{ height: 400, width: '100%' }}>
+      <DataGrid
+        rows={visibleRows}
+        columns={columns}
+        getRowId={(row) => row.id}
+        hideFooter
+      />
+    </div>
+  );
+}
