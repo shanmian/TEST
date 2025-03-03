@@ -1,0 +1,165 @@
+import { useState, useCallback } from 'react';
+import { 
+  DataGrid, 
+  GridColDef, 
+  GridRenderCellParams,
+} from '@mui/x-data-grid';
+import { 
+  Box, 
+  IconButton, 
+  Typography, 
+  styled
+} from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+
+// 树形数据接口
+interface TreeNode {
+  id: string | number;
+  parentId?: string | number | null;
+  [key: string]: any;
+}
+
+interface TreeDataGridProps {
+  data: TreeNode[];
+  columns: GridColDef[];
+  loading?: boolean;
+  getTreeDataPath?: (row: any) => any[];
+  height?: number | string;
+  width?: number | string;
+}
+
+// 样式化组件
+const StyledTreeCell = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  height: '100%'
+}));
+
+const TreeDataGrid = ({
+  data,
+  columns,
+  loading = false,
+  height = 400,
+  width = '100%'
+}: TreeDataGridProps) => {
+  // 展开状态管理
+  const [expandedRows, setExpandedRows] = useState<Record<string | number, boolean>>({});
+  
+  // 处理数据，构建树形结构
+  const processTreeData = useCallback(() => {
+    // 创建ID到节点的映射
+    const idToNodeMap = new Map<string | number, TreeNode & { level: number, children: any[] }>();
+    
+    // 初始化所有节点
+    data.forEach(node => {
+      idToNodeMap.set(node.id, { ...node, level: 0, children: [] });
+    });
+    
+    // 构建树形结构
+    const rootNodes: any[] = [];
+    
+    idToNodeMap.forEach(node => {
+      if (node.parentId === null || node.parentId === undefined) {
+        // 根节点
+        rootNodes.push(node);
+      } else {
+        // 子节点
+        const parent = idToNodeMap.get(node.parentId);
+        if (parent) {
+          node.level = parent.level + 1;
+          parent.children.push(node);
+        } else {
+          // 找不到父节点，作为根节点处理
+          rootNodes.push(node);
+        }
+      }
+    });
+    
+    // 扁平化树形结构，考虑展开状态
+    const flattenTree = (nodes: any[], result: any[] = []) => {
+      nodes.forEach(node => {
+        result.push(node);
+        
+        // 如果该节点已展开且有子节点，则添加子节点
+        if (expandedRows[node.id] && node.children.length > 0) {
+          flattenTree(node.children, result);
+        }
+      });
+      
+      return result;
+    };
+    
+    return flattenTree(rootNodes);
+  }, [data, expandedRows]);
+  
+  // 处理展开/折叠
+  const handleToggleExpand = (id: string | number) => {
+    setExpandedRows(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+  
+  // 自定义树形单元格渲染
+  const renderTreeCell = (params: GridRenderCellParams) => {
+    const { row, value } = params;
+    const hasChildren = row.children && row.children.length > 0;
+    const level = row.level || 0;
+    const isExpanded = expandedRows[row.id] || false;
+    
+    return (
+      <StyledTreeCell>
+        <Box sx={{ width: level * 20 }} /> {/* 缩进 */}
+        {hasChildren && (
+          <IconButton
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggleExpand(row.id);
+            }}
+          >
+            {isExpanded ? <ExpandMoreIcon /> : <ChevronRightIcon />}
+          </IconButton>
+        )}
+        {!hasChildren && <Box sx={{ width: 28 }} />}
+        <Typography noWrap>{value}</Typography>
+      </StyledTreeCell>
+    );
+  };
+  
+  // 增强列定义，添加树形渲染
+  const enhancedColumns = columns.map((col, index) => {
+    // 第一列作为树形列
+    if (index === 0) {
+      return {
+        ...col,
+        renderCell: renderTreeCell
+      };
+    }
+    return col;
+  });
+  
+  // 获取处理后的数据
+  const rows = processTreeData();
+  
+  return (
+    <Box sx={{ height, width }}>
+      <DataGrid
+        rows={rows}
+        columns={enhancedColumns}
+        loading={loading}
+        disableRowSelectionOnClick
+        getRowClassName={(params) => `level-${params.row.level || 0}`}
+        sx={{
+          '& .level-0': { fontWeight: 'bold' },
+          '& .level-1': { pl: 1 },
+          '& .level-2': { pl: 2 },
+          '& .level-3': { pl: 3 },
+        }}
+      />
+    </Box>
+  );
+};
+
+export default TreeDataGrid;
