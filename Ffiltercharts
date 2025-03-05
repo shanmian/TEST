@@ -1,0 +1,28 @@
+const transformToBarData = (components: any[]) => {
+  // 获取所有唯一的名称和标签
+  const names = Array.from(new Set(components.map(item => item.name)));
+  const uniqueLabels = Array.from(new Set(components.map(item => item.label)));
+
+  // 创建数据结构
+  const barData = uniqueLabels.map(label => {
+    const data = names.map(name => {
+      const item = components.find(comp => comp.name === name && comp.label === label);
+      return item ? item.value : 0;
+    });
+
+    // 从原始数据中获取对应标签的颜色
+    const color = components.find(comp => comp.label === label)?.color;
+
+    return {
+      data,
+      stack: 'A',
+      label,
+      color
+    };
+  });
+
+  return {
+    barData,
+    labels: names
+  };
+};
