@@ -1,0 +1,41 @@
+function generateC(a, b) {
+  return a.map(item => {
+    const result = {
+      label: item.headerName,
+      listOptions: []
+    };
+    
+    if (item.options) {
+      // 如果存在预定义选项，直接使用
+      result.listOptions = item.options.map(opt => ({ label: opt.label }));
+    } else {
+      // 从数据中收集唯一值并生成选项
+      const field = item.field;
+      const uniqueValues = [...new Set(b.map(entry => entry[field]))];
+      result.listOptions = uniqueValues.map(value => ({ label: value }));
+    }
+    
+    return result;
+  });
+}
+
+// 测试用例
+const a = [
+  {
+    field: "event_name",
+    headerName: "Event Name",
+    options: [{ label: "Y" }, { label: "N" }]
+  },
+  {
+    field: "event_type",
+    headerName: "Event Type"
+  }
+];
+
+const b = [
+  { event_name: "testing", event_type: "reme" },
+  { event_name: "testing1", event_type: "reme1" }
+];
+
+const c = generateC(a, b);
+console.log(c);
