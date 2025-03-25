@@ -1,0 +1,197 @@
+import React, { useState } from 'react';
+import { 
+  Button, 
+  Drawer, 
+  Box, 
+  IconButton, 
+  Typography, 
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Checkbox,
+  Collapse
+} from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import CloseIcon from '@mui/icons-material/Close';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import CheckIcon from '@mui/icons-material/Check';
+import { StaticDatePicker } from '@mui/x-date-pickers/StaticDatePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import dayjs from 'dayjs';
+
+// 筛选项类型定义
+interface FilterOption {
+  field: string;
+  headerName: string;
+  type: 'date' | 'list';
+  options?: Array<{ id: string; label: string }>;
+}
+
+interface FilterDrawerProps {
+  filters: FilterOption[];
+  onApply: (values: Record<string, any>) => void;
+}
+
+const FilterDrawer: React.FC<FilterDrawerProps> = ({ filters, onApply }) => {
+  const [open, setOpen] = useState(false);
+  const [filterValues, setFilterValues] = useState<Record<string, any>>({});
+  const [expandedSelects, setExpandedSelects] = useState<Record<string, boolean>>({});
+  const [selectedListItems, setSelectedListItems] = useState<Record<string, string[]>>({});
+
+  const handleOpen = () => setOpen(true);
+  const handleClose = () => {
+    setOpen(false);
+    setFilterValues({});
+    setExpandedSelects({});
+    setSelectedListItems({});
+  };
+
+  const handleDateChange = (field: string, date: any) => {
+    setFilterValues(prev => ({ ...prev, [field]: date }));
+  };
+
+  const handleListItemToggle = (field: string, itemId: string) => {
+    setSelectedListItems(prev => {
+      const current = prev[field] || [];
+      const newSelected = current.includes(itemId)
+        ? current.filter(id => id !== itemId)
+        : [...current, itemId];
+      return { ...prev, [field]: newSelected };
+    });
+  };
+
+  const toggleExpand = (field: string) => {
+    setExpandedSelects(prev => ({
+      ...Object.keys(prev).reduce((acc, key) => ({ ...acc, [key]: false }), {}),
+      [field]: !prev[field]
+    }));
+  };
+
+  const renderListOptions = (field: string, options: Array<{ id: string; label: string }>) => {
+    const isExpanded = expandedSelects[field];
+    const showMore = options.length > 10;
+    const displayOptions = showMore && !isExpanded ? options.slice(0, 10) : options;
+    const selected = selectedListItems[field] || [];
+
+    return (
+      <List sx={{ width: '100%', bgcolor: 'background.paper' }}>
+        {displayOptions.map(option => (
+          <ListItem key={option.id} disablePadding>
+            <ListItemButton onClick={() => handleListItemToggle(field, option.id)}>
+              <ListItemIcon>
+                <Checkbox
+                  edge="start"
+                  checked={selected.includes(option.id)}
+                  tabIndex={-1}
+                  disableRipple
+                />
+              </ListItemIcon>
+              <ListItemText primary={option.label} />
+            </ListItemButton>
+          </ListItem>
+        ))}
+        {showMore && (
+          <Box textAlign="right" p={1}>
+            <Button size="small" onClick={() => toggleExpand(field)}>
+              {isExpanded ? '收起' : '更多'}
+            </Button>
+          </Box>
+        )}
+      </List>
+    );
+  };
+
+  const handleApply = () => {
+    const values: Record<string, any> = {};
+
+    // 处理日期值
+    Object.entries(filterValues).forEach(([key, value]) => {
+      if (value) values[key] = dayjs(value).format('YYYY-MM-DD');
+    });
+
+    // 处理列表值
+    Object.entries(selectedListItems).forEach(([key, value]) => {
+      if (value.length > 0) values[key] = value;
+    });
+
+    onApply(values);
+    handleClose();
+  };
+
+  return (
+    <>
+      <Button variant="outlined" startIcon={<FilterListIcon />} onClick={handleOpen}>
+        筛选
+      </Button>
+
+      <Drawer
+        anchor="right"
+        open={open}
+        onClose={handleClose}
+        PaperProps={{ sx: { width: 320, maxHeight: '100vh' } }}
+      >
+        <Box p={3} height="100%" display="flex" flexDirection="column">
+          <Box display="flex" justifyContent="flex-end" mb={2}>
+            <IconButton onClick={handleClose} edge="end">
+              <CloseIcon />
+            </IconButton>
+          </Box>
+
+          <Box flex={1} overflow="auto">
+            {filters.map(filter => (
+              <Box key={filter.field} mb={3}>
+                <Typography
+                  variant="subtitle1"
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    '&:hover': { color: 'primary.main' }
+                  }}
+                  onClick={() => toggleExpand(filter.field)}
+                >
+                  {expandedSelects[filter.field] ? <ExpandMoreIcon /> : <ChevronRightIcon />}
+                  {filter.headerName}
+                  {(filterValues[filter.field] || selectedListItems[filter.field]?.length) && (
+                    <CheckIcon fontSize="small" sx={{ ml: 1, color: 'primary.main' }} />
+                  )}
+                </Typography>
+
+                <Collapse in={expandedSelects[filter.field]}>
+                  {filter.type === 'date' ? (
+                    <Box mt={1}>
+                      <LocalizationProvider dateAdapter={AdapterDayjs}>
+                        <StaticDatePicker
+                          displayStaticWrapperAs="desktop"
+                          value={filterValues[filter.field] || null}
+                          onChange={(date) => handleDateChange(filter.field, date)}
+                          slotProps={{
+                            actionBar: { actions: ['clear'] },
+                          }}
+                        />
+                      </LocalizationProvider>
+                    </Box>
+                  ) : (
+                    filter.options && renderListOptions(filter.field, filter.options)
+                  )}
+                </Collapse>
+              </Box>
+            ))}
+          </Box>
+
+          <Box mt={3} display="flex" justifyContent="flex-end">
+            <Button variant="contained" onClick={handleApply}>
+              应用
+            </Button>
+          </Box>
+        </Box>
+      </Drawer>
+    </>
+  );
+};
+
+export default FilterDrawer;
