@@ -1,0 +1,274 @@
+以下是根据示例数据结构调整后的完整代码：
+
+```tsx
+import React, { useState } from 'react';
+import { 
+  Button, 
+  Drawer, 
+  Box, 
+  IconButton, 
+  Typography, 
+  Stack,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  Collapse
+} from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import CloseIcon from '@mui/icons-material/Close';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import CheckIcon from '@mui/icons-material/Check';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import dayjs, { Dayjs } from 'dayjs';
+
+// 筛选项类型定义
+interface FilterOption {
+  field: string;
+  headerName: string;
+  type: 'date' | 'list';
+  options?: Array<{ id: string; label: string }>;
+}
+
+interface FilterDrawerProps {
+  filters: FilterOption[];
+  onApply: (values: Record<string, any>) => void;
+}
+
+const FilterDrawer: React.FC<FilterDrawerProps> = ({ filters, onApply }) => {
+  const [open, setOpen] = useState(false);
+  const [filterValues, setFilterValues] = useState<Record<string, any>>({});
+  const [expandedSelects, setExpandedSelects] = useState<Record<string, boolean>>({});
+  const [selectedListItems, setSelectedListItems] = useState<Record<string, string[]>>({});
+
+  const handleOpen = () => setOpen(true);
+  const handleClose = () => {
+    setOpen(false);
+    setFilterValues({});
+    setExpandedSelects({});
+    setSelectedListItems({});
+  };
+
+  const handleDateChange = (field: string, date: Dayjs | null) => {
+    setFilterValues(prev => ({ ...prev, [field]: date }));
+  };
+
+  const handleListItemToggle = (field: string, itemId: string) => {
+    setSelectedListItems(prev => {
+      const currentSelected = prev[field] || [];
+      const newSelected = currentSelected.includes(itemId)
+        ? currentSelected.filter(id => id !== itemId)
+        : [...currentSelected, itemId];
+      
+      setFilterValues(prevValues => ({
+        ...prevValues,
+        [field]: newSelected
+      }));
+      
+      return { ...prev, [field]: newSelected };
+    });
+  };
+
+  const toggleExpand = (field: string) => {
+    setExpandedSelects(prev => ({
+      ...Object.keys(prev).reduce((acc, key) => ({ ...acc, [key]: false }), {}),
+      [field]: !prev[field]
+    }));
+  };
+
+  const renderListOptions = (field: string, options: Array<{ id: string; label: string }>) => {
+    const isExpanded = expandedSelects[field];
+    const showMoreButton = options.length > 10;
+    const displayOptions = showMoreButton && !isExpanded ? options.slice(0, 10) : options;
+    const selected = selectedListItems[field] || [];
+
+    return (
+      <List sx={{ width: '100%' }}>
+        {displayOptions.map((option) => (
+          <ListItem key={option.id} disablePadding>
+            <ListItemButton
+              dense
+              onClick={() => handleListItemToggle(field, option.id)}
+            >
+              <ListItemText primary={option.label} />
+              {selected.includes(option.id) && <CheckIcon color="primary" fontSize="small" />}
+            </ListItemButton>
+          </ListItem>
+        ))}
+        
+        {showMoreButton && (
+          <Box sx={{ textAlign: 'right', p: 1 }}>
+            <Button 
+              size="small"
+              onClick={() => toggleExpand(field)}
+            >
+              {isExpanded ? '收起' : '更多'}
+            </Button>
+          </Box>
+        )}
+      </List>
+    );
+  };
+
+  return (
+    <>
+      <Button 
+        variant="outlined" 
+        startIcon={<FilterListIcon />} 
+        onClick={handleOpen}
+      >
+        筛选
+      </Button>
+
+      <Drawer
+        anchor="right"
+        open={open}
+        onClose={handleClose}
+        PaperProps={{ sx: { width: 320, maxWidth: '90vw' } }}
+      >
+        <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+            <IconButton onClick={handleClose}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+
+          <Box sx={{ flex: 1, overflowY: 'auto' }}>
+            <Stack spacing={3}>
+              {filters.map((filter) => (
+                <Box key={filter.field}>
+                  {filter.type === 'date' && (
+                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                      <DatePicker
+                        label={filter.headerName}
+                        value={filterValues[filter.field] || null}
+                        onChange={(date) => handleDateChange(filter.field, date)}
+                        format="YYYY-MM-DD"
+                        sx={{ width: '100%' }}
+                      />
+                    </LocalizationProvider>
+                  )}
+
+                  {filter.type === 'list' && filter.options && (
+                    <Box>
+                      <Typography 
+                        variant="subtitle1"
+                        sx={{ 
+                          display: 'flex',
+                          alignItems: 'center',
+                          cursor: 'pointer',
+                          '&:hover': { color: 'primary.main' }
+                        }}
+                        onClick={() => toggleExpand(filter.field)}
+                      >
+                        {expandedSelects[filter.field] ? (
+                          <ExpandMoreIcon fontSize="small" />
+                        ) : (
+                          <ChevronRightIcon fontSize="small" />
+                        )}
+                        {filter.headerName}
+                        {selectedListItems[filter.field]?.length > 0 && (
+                          <Typography
+                            component="span"
+                            color="primary"
+                            sx={{ ml: 1, fontSize: '0.875rem' }}
+                          >
+                            ({selectedListItems[filter.field]?.length})
+                          </Typography>
+                        )}
+                      </Typography>
+                      
+                      <Collapse in={expandedSelects[filter.field]}>
+                        {renderListOptions(filter.field, filter.options)}
+                      </Collapse>
+                    </Box>
+                  )}
+                </Box>
+              ))}
+            </Stack>
+          </Box>
+
+          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
+            <Button 
+              variant="contained" 
+              onClick={() => {
+                onApply(filterValues);
+                handleClose();
+              }}
+            >
+              应用
+            </Button>
+          </Box>
+        </Box>
+      </Drawer>
+    </>
+  );
+};
+
+export default FilterDrawer;
+```
+
+使用示例：
+```tsx
+// 在父组件中使用
+const App = () => {
+  const filters: FilterOption[] = [
+    {
+      field: 'tags',
+      headerName: '文章标签',
+      type: 'list',
+      options: Array.from({ length: 15 }, (_, i) => ({
+        id: `tag-${i + 1}`,
+        label: `标签 ${i + 1}`
+      }))
+    },
+    {
+      field: 'category',
+      headerName: '分类',
+      type: 'list',
+      options: Array.from({ length: 20 }, (_, i) => ({
+        id: `cat-${i + 1}`,
+        label: `分类 ${i + 1}`
+      }))
+    },
+    {
+      field: 'publishDate',
+      headerName: '发布日期',
+      type: 'date'
+    }
+  ];
+
+  const handleApply = (values: Record<string, any>) => {
+    console.log('Applied filters:', values);
+    // 这里处理筛选逻辑
+  };
+
+  return (
+    <FilterDrawer 
+      filters={filters}
+      onApply={handleApply}
+    />
+  );
+};
+```
+
+主要特性：
+1. 完全支持示例数据结构
+2. 列表筛选支持：
+   - 展开/收起功能（超过10项显示"更多"按钮）
+   - 多选操作
+   - 实时显示已选数量
+3. 日期筛选支持Dayjs日期对象
+4. 各筛选器独立展开状态
+5. 响应式布局（最大宽度90vw）
+6. 完整的类型安全（TypeScript）
+7. 样式优化：
+   - 选中状态图标指示
+   - 悬停效果
+   - 合理的间距和排版
+8. 内存管理：
+   - 关闭抽屉时自动重置状态
+   - 状态对象保持最小必要数据
