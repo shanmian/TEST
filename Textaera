@@ -1,0 +1,192 @@
+以下是使用 TypeScript 扩展 MUI `TextareaAutosize` 的 Props 并添加自定义 `onChange` 的完整实现方案：
+
+```tsx
+import React from 'react';
+import TextareaAutosize, {
+  TextareaAutosizeProps
+} from '@mui/material/TextareaAutosize';
+
+// 定义扩展后的 Props 类型
+interface CustomTextareaProps
+  extends Omit<TextareaAutosizeProps, 'onChange' | 'value' | 'defaultValue'> {
+  /** 自定义 onChange 事件，直接返回字符串值 */
+  onChange?: (value: string) => void;
+  /** 受控模式的值 */
+  value?: string;
+  /** 非受控模式的默认值 */
+  defaultValue?: string;
+}
+
+const CustomTextarea = React.forwardRef<HTMLTextAreaElement, CustomTextareaProps>(
+  ({ onChange, ...props }, ref) => {
+    // 处理原生 onChange 事件
+    const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      // 同时触发原生 onChange 和自定义 onChange
+      props.onChange?.(e); // 保留原生事件触发
+      onChange?.(e.target.value); // 触发自定义值回调
+    };
+
+    return (
+      <TextareaAutosize
+        {...props}
+        ref={ref}
+        onChange={handleChange}
+      />
+    );
+  }
+);
+
+export default CustomTextarea;
+```
+
+### 关键特性说明
+
+1. **类型扩展策略**：
+```ts
+interface CustomTextareaProps
+  extends Omit<TextareaAutosizeProps, 'onChange' | 'value' | 'defaultValue'> {
+  onChange?: (value: string) => void;
+  value?: string;
+  defaultValue?: string;
+}
+```
+- 使用 `Omit` 移除原生类型中的特定属性
+- 重新定义更简洁的 `onChange` 类型
+- 明确 value 类型为字符串
+
+2. **事件处理增强**：
+```ts
+const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  props.onChange?.(e); // 保留原生事件触发
+  onChange?.(e.target.value); // 触发自定义值回调
+};
+```
+- 同时支持原生事件和简化版回调
+- 自动提取 `e.target.value`
+- 使用可选链保证安全性
+
+3. **完整类型支持**：
+```tsx
+<CustomTextarea
+  value="hello"
+  minRows={3}
+  placeholder="输入内容..."
+  onChange={(value) => console.log(value)} // 简化回调
+  onBlur={(e) => console.log(e.target.value)} // 原生事件
+  style={{ width: 300 }}
+/>
+```
+
+### 高级增强版本（支持更多功能）
+```tsx
+import React from 'react';
+import TextareaAutosize, {
+  TextareaAutosizeProps
+} from '@mui/material/TextareaAutosize';
+
+type ValueType = string | number | null;
+
+interface EnhancedTextareaProps
+  extends Omit<TextareaAutosizeProps, 'onChange' | 'value' | 'defaultValue'> {
+  onChange?: (value: string, event?: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  value?: ValueType;
+  defaultValue?: ValueType;
+  /** 自动去除首尾空格 */
+  trim?: boolean;
+  /** 最大长度限制 */
+  maxLength?: number;
+}
+
+const EnhancedTextarea = React.forwardRef<HTMLTextAreaElement, EnhancedTextareaProps>(
+  ({ onChange, trim = false, maxLength, ...props }, ref) => {
+    const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      let value = e.target.value;
+      
+      // 处理 trim
+      if (trim) value = value.trim();
+      
+      // 处理 maxLength
+      if (maxLength && value.length > maxLength) {
+        value = value.slice(0, maxLength);
+      }
+
+      // 更新显示值
+      e.target.value = value;
+      
+      // 触发回调
+      onChange?.(value, e);
+      props.onChange?.(e);
+    };
+
+    // 处理初始值
+    const formatValue = (val?: ValueType) => {
+      if (val === null || val === undefined) return '';
+      return String(val);
+    };
+
+    return (
+      <TextareaAutosize
+        {...props}
+        ref={ref}
+        onChange={handleChange}
+        value={formatValue(props.value)}
+        defaultValue={formatValue(props.defaultValue)}
+      />
+    );
+  }
+);
+
+export default EnhancedTextarea;
+```
+
+### 主要增强功能：
+1. **智能值处理**：
+   - 自动转换 number/null 类型为字符串
+   - 处理 `trim` 自动去空格
+   - `maxLength` 长度限制
+
+2. **复合回调参数**：
+```ts
+onChange={(value, event) => {
+  // 同时获取处理后的值和原生事件
+}}
+```
+
+3. **类型安全增强**：
+```ts
+// 使用时会自动推断类型
+<EnhancedTextarea 
+  value={123}  // 自动转换为字符串
+  trim
+  maxLength={100}
+  onChange={(val) => console.log(val.length)}
+/>
+```
+
+### 使用示例
+```tsx
+import React, { useState } from 'react';
+import EnhancedTextarea from './EnhancedTextarea';
+
+const Demo = () => {
+  const [value, setValue] = useState('');
+
+  return (
+    <EnhancedTextarea
+      value={value}
+      onChange={(val) => setValue(val)}
+      minRows={3}
+      trim
+      maxLength={200}
+      placeholder="请输入内容..."
+      style={{ 
+        width: '100%',
+        padding: '8px 12px',
+        border: '1px solid #ccc'
+      }}
+    />
+  );
+};
+```
+
+这种实现方式既保持了 MUI 原生组件的所有功能，又通过 TypeScript 类型扩展添加了更符合业务需求的功能，同时保证了类型安全性和代码可维护性。
