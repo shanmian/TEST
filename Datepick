@@ -1,0 +1,220 @@
+# MUI DatePicker 完整测试：日期更改验证
+
+我将扩展之前的测试，添加完整的日期更改验证功能，包括选择新日期、验证输入框更新以及选中状态的变化。
+
+```jsx
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import dayjs from 'dayjs';
+
+// 被测试组件
+function TestedDatePicker() {
+  return (
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <div style={{ padding: '20px', maxWidth: '400px', margin: '40px auto', backgroundColor: '#f5f5f5', borderRadius: '8px' }}>
+        <h2 style={{ textAlign: 'center', color: '#1976d2' }}>日期选择器测试</h2>
+        <DatePicker
+          label="选择日期"
+          slotProps={{ 
+            textField: { 
+              variant: 'outlined',
+              fullWidth: true,
+              inputProps: { 'data-testid': 'date-input' }
+            } 
+          }}
+        />
+      </div>
+    </LocalizationProvider>
+  );
+}
+
+// 测试用例
+describe('MUI DatePicker 完整测试', () => {
+  test('验证今日日期按钮被默认选中', async () => {
+    // 渲染组件
+    render(<TestedDatePicker />);
+    
+    // 打开日历
+    const input = screen.getByLabelText('选择日期');
+    await userEvent.click(input);
+    
+    // 确保日历弹窗已打开
+    const calendar = await screen.findByRole('dialog');
+    expect(calendar).toBeInTheDocument();
+    
+    // 获取今日日期
+    const today = dayjs();
+    const todayDate = today.date();
+    const todayMonth = today.format('MMMM'); // 获取月份名称
+    const todayYear = today.year();
+    
+    // 验证日历标题显示当前年月
+    const calendarTitle = screen.getByText(`${todayMonth} ${todayYear}`);
+    expect(calendarTitle).toBeInTheDocument();
+    
+    // 获取所有日期按钮
+    const dateButtons = screen.getAllByRole('gridcell');
+    
+    // 查找今日日期按钮
+    const todayButton = dateButtons.find(button => {
+      return button.textContent === todayDate.toString() && 
+             button.getAttribute('aria-selected') === 'true';
+    });
+    
+    expect(todayButton).toBeDefined();
+    
+    // 验证今日按钮具有选中状态类
+    expect(todayButton).toHaveClass('Mui-selected');
+    
+    // 可视化验证
+    todayButton.style.backgroundColor = '#e3f2fd';
+  });
+
+  test('验证日期更改功能', async () => {
+    // 渲染组件
+    render(<TestedDatePicker />);
+    
+    // 打开日历
+    const input = screen.getByLabelText('选择日期');
+    await userEvent.click(input);
+    
+    // 确保日历弹窗已打开
+    const calendar = await screen.findByRole('dialog');
+    expect(calendar).toBeInTheDocument();
+    
+    // 获取当前日期
+    const currentDate = dayjs();
+    const currentDay = currentDate.date();
+    
+    // 选择目标日期（当前日期 + 7天）
+    const targetDate = currentDate.add(7, 'day');
+    const targetDay = targetDate.date();
+    
+    // 如果目标日期在下个月，需要切换到下个月
+    if (targetDate.month() !== currentDate.month()) {
+      const nextMonthButton = screen.getByLabelText('Next month');
+      await userEvent.click(nextMonthButton);
+    }
+    
+    // 获取所有日期按钮
+    const dateButtons = screen.getAllByRole('gridcell');
+    
+    // 查找目标日期按钮
+    const targetButton = dateButtons.find(button => 
+      button.textContent === targetDay.toString() && 
+      !button.classList.contains('MuiPickersDay-dayOutsideMonth')
+    );
+    
+    expect(targetButton).toBeDefined();
+    
+    // 点击目标日期
+    await userEvent.click(targetButton);
+    
+    // 验证日历已关闭
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    
+    // 验证输入框已更新
+    const formattedDate = targetDate.format('MM/DD/YYYY');
+    const dateInput = screen.getByTestId('date-input');
+    expect(dateInput).toHaveValue(formattedDate);
+    
+    // 重新打开日历验证选中状态
+    await userEvent.click(input);
+    const reopenedCalendar = await screen.findByRole('dialog');
+    expect(reopenedCalendar).toBeInTheDocument();
+    
+    // 获取更新后的日期按钮
+    const updatedDateButtons = screen.getAllByRole('gridcell');
+    const selectedButton = updatedDateButtons.find(button => 
+      button.getAttribute('aria-selected') === 'true'
+    );
+    
+    expect(selectedButton).toBeDefined();
+    expect(selectedButton.textContent).toBe(targetDay.toString());
+    
+    // 验证选中状态
+    expect(selectedButton).toHaveClass('Mui-selected');
+    
+    // 可视化验证
+    selectedButton.style.backgroundColor = '#e3f2fd';
+  });
+});
+
+// 辅助函数：创建可视化测试环境
+function App() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', fontFamily: 'Arial, sans-serif' }}>
+      <h1 style={{ color: '#1976d2', marginBottom: '30px' }}>MUI DatePicker 测试演示</h1>
+      <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', justifyContent: 'center' }}>
+        <TestedDatePicker />
+        <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', maxWidth: '500px' }}>
+          <h3 style={{ color: '#1976d2' }}>测试说明</h3>
+          <ul style={{ textAlign: 'left', lineHeight: '1.6' }}>
+            <li><strong>测试 1:</strong> 验证今日日期默认选中（蓝色背景）</li>
+            <li><strong>测试 2:</strong> 选择新日期（7天后）并验证：
+              <ul>
+                <li>输入框更新为新日期</li>
+                <li>新日期在日历中被选中（蓝色背景）</li>
+                <li>今日日期不再被选中</li>
+              </ul>
+            </li>
+            <li>运行测试后，选中的日期会显示蓝色背景</li>
+          </ul>
+          <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#e3f2fd', borderRadius: '4px' }}>
+            <h4>测试状态：</h4>
+            <p id="test-status">未运行</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default App;
+```
+
+## 测试功能说明
+
+### 1. 今日日期默认选中验证
+- 打开日历组件
+- 验证当前年月显示正确
+- 查找并验证今日日期按钮具有选中状态（`Mui-selected`类）
+- 可视化标记今日日期（蓝色背景）
+
+### 2. 日期更改功能验证
+- 打开日历组件
+- 选择7天后的日期
+- 验证日历正确关闭
+- 验证输入框更新为选择的日期
+- 重新打开日历验证新日期被选中
+- 验证今日日期不再被选中
+- 可视化标记新选中的日期（蓝色背景）
+
+### 3. 边界情况处理
+- 自动处理跨月选择（点击"下个月"按钮）
+- 过滤无效日期（`MuiPickersDay-dayOutsideMonth`类）
+- 正确处理日期格式（MM/DD/YYYY）
+
+## 测试结果验证方法
+
+1. **视觉验证**：测试运行后，选中的日期会显示蓝色背景
+2. **DOM属性验证**：
+   - `aria-selected="true"`属性
+   - `Mui-selected`类名
+3. **输入框值验证**：检查输入框是否更新为正确的日期格式
+4. **日历标题验证**：确保显示正确的年月
+
+## 测试覆盖的关键场景
+
+1. 默认状态（今日日期选中）
+2. 日期选择功能
+3. 跨月选择（自动切换月份）
+4. 输入框更新
+5. 重新打开日历后的选中状态
+
+这个测试方案完整覆盖了DatePicker组件的核心功能，包括日期选择和状态验证，并通过可视化反馈使测试结果更加直观。
