@@ -1,0 +1,237 @@
+# MyModal Storybook and Test Implementation
+
+Based on the provided code snippets, I'll create a Storybook story and a test for the `MyModal` component.
+
+## Storybook Implementation (MyModal.stories.tsx)
+
+```tsx
+import { Meta, StoryObj } from '@storybook/react';
+import { MyModal } from './MyModal';
+import { ModalProps } from './type';
+import { Button } from '@mui/material'; // Assuming MUI is used based on the code
+import { useState } from 'react';
+
+const meta: Meta<typeof MyModal> = {
+  title: 'Components/Modal/MyModal',
+  component: MyModal,
+  tags: ['autodocs'],
+};
+
+export default meta;
+
+type Story = StoryObj<typeof MyModal>;
+
+// Basic usage story
+export const ConfirmModal: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    
+    const handleOpen = () => {
+      MyModal.confirm({
+        open: true,
+        title: 'Confirmation',
+        content: 'Are you sure you want to proceed?',
+        okText: 'Confirm',
+        cancelText: 'Cancel',
+        onSubmit: () => {
+          console.log('Confirmed');
+          setIsOpen(false);
+        },
+        onClose: () => {
+          console.log('Cancelled');
+          setIsOpen(false);
+        }
+      });
+    };
+
+    return (
+      <div>
+        <Button variant="contained" onClick={handleOpen}>
+          Open Confirm Modal
+        </Button>
+      </div>
+    );
+  }
+};
+
+// Alert type modal
+export const AlertModal: Story = {
+  render: () => {
+    const handleAlert = () => {
+      MyModal.confirm({
+        open: true,
+        title: 'Alert',
+        content: 'This is an alert message',
+        actionType: 'alertType',
+        okText: 'OK',
+        onSubmit: () => console.log('Alert acknowledged')
+      });
+    };
+
+    return (
+      <Button variant="contained" onClick={handleAlert}>
+        Open Alert Modal
+      </Button>
+    );
+  }
+};
+
+// Custom content modal
+export const CustomModal: Story = {
+  render: () => {
+    const handleCustom = () => {
+      MyModal.confirm({
+        open: true,
+        customTitle: <h2 style={{ color: 'red' }}>Custom Title</h2>,
+        content: 'This modal has custom elements',
+        customButton: (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={() => console.log('Custom action')}>Custom Action</button>
+          </div>
+        )
+      });
+    };
+
+    return (
+      <Button variant="contained" onClick={handleCustom}>
+        Open Custom Modal
+      </Button>
+    );
+  }
+};
+```
+
+## Test Implementation (MyModal.test.tsx)
+
+```tsx
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MyModal } from './MyModal';
+import { act } from 'react-dom/test-utils';
+
+describe('MyModal', () => {
+  beforeEach(() => {
+    // Clean up any existing modals
+    document.body.innerHTML = '';
+  });
+
+  it('should render confirm modal with title and content', () => {
+    act(() => {
+      MyModal.confirm({
+        open: true,
+        title: 'Test Title',
+        content: 'Test Content',
+        okText: 'OK',
+        cancelText: 'Cancel'
+      });
+    });
+
+    expect(screen.getByText('Test Title')).toBeInTheDocument();
+    expect(screen.getByText('Test Content')).toBeInTheDocument();
+    expect(screen.getByText('OK')).toBeInTheDocument();
+    expect(screen.getByText('Cancel')).toBeInTheDocument();
+  });
+
+  it('should call onSubmit when OK button is clicked', async () => {
+    const onSubmitMock = jest.fn();
+    
+    act(() => {
+      MyModal.confirm({
+        open: true,
+        title: 'Test',
+        content: 'Test',
+        okText: 'OK',
+        onSubmit: onSubmitMock
+      });
+    });
+
+    await userEvent.click(screen.getByText('OK'));
+    expect(onSubmitMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('should call onClose when Cancel button is clicked', async () => {
+    const onCloseMock = jest.fn();
+    
+    act(() => {
+      MyModal.confirm({
+        open: true,
+        title: 'Test',
+        content: 'Test',
+        cancelText: 'Cancel',
+        onClose: onCloseMock
+      });
+    });
+
+    await userEvent.click(screen.getByText('Cancel'));
+    expect(onCloseMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('should render alert type modal with only OK button', () => {
+    act(() => {
+      MyModal.confirm({
+        open: true,
+        title: 'Alert',
+        content: 'This is an alert',
+        actionType: 'alertType',
+        okText: 'OK'
+      });
+    });
+
+    expect(screen.getByText('OK')).toBeInTheDocument();
+    expect(screen.queryByText('Cancel')).not.toBeInTheDocument();
+  });
+
+  it('should render custom title and buttons', () => {
+    act(() => {
+      MyModal.confirm({
+        open: true,
+        customTitle: <div>Custom Title</div>,
+        customButton: <button>Custom Button</button>
+      });
+    });
+
+    expect(screen.getByText('Custom Title')).toBeInTheDocument();
+    expect(screen.getByText('Custom Button')).toBeInTheDocument();
+  });
+
+  it('should remove modal from DOM after closing', async () => {
+    act(() => {
+      MyModal.confirm({
+        open: true,
+        title: 'Test',
+        content: 'Test'
+      });
+    });
+
+    const modalTitle = screen.getByText('Test');
+    expect(modalTitle).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /ok|cancel/i }));
+
+    await waitFor(() => {
+      expect(modalTitle).not.toBeInTheDocument();
+    });
+  });
+});
+```
+
+## Notes:
+
+1. The Storybook implementation includes three stories:
+   - Basic confirm modal with OK/Cancel buttons
+   - Alert-type modal with only OK button
+   - Modal with custom title and buttons
+
+2. The test implementation covers:
+   - Basic rendering of the modal
+   - Submit and close handlers
+   - Alert type modal behavior
+   - Custom elements rendering
+   - Modal cleanup after closing
+
+3. Assumptions made:
+   - The modal uses Material-UI (based on the `Modal` component in the code)
+   - The actual modal implementation is in a separate component that `Modal2` uses
+   - The `onClose` and `onSubmit` handlers properly close the modal
+
+4. You may need to adjust the imports and implementation details based on your actual project structure and the complete modal implementation.
