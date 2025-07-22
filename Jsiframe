@@ -1,0 +1,356 @@
+# React Iframe 自动撑满屏幕解决方案
+
+我将为您创建一个完整的React应用，展示如何实现iframe自动撑满整个屏幕，并提供多种实现方法和详细说明。
+
+```jsx
+import React, { useState, useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom/client';
+
+const FullScreenIframe = () => {
+  const [method, setMethod] = useState('css');
+  const [source, setSource] = useState('https://react.dev/');
+  const [customUrl, setCustomUrl] = useState('');
+  const iframeRef = useRef(null);
+  
+  const applyMethod = () => {
+    switch(method) {
+      case 'css':
+        return (
+          <iframe
+            ref={iframeRef}
+            src={source}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              border: 'none'
+            }}
+            title="Fullscreen Iframe"
+          />
+        );
+      case 'viewport':
+        return (
+          <iframe
+            ref={iframeRef}
+            src={source}
+            style={{
+              width: '100vw',
+              height: '100vh',
+              border: 'none'
+            }}
+            title="Fullscreen Iframe"
+          />
+        );
+      case 'flex':
+        return (
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column',
+            height: '100vh',
+            width: '100vw'
+          }}>
+            <iframe
+              ref={iframeRef}
+              src={source}
+              style={{
+                flex: 1,
+                border: 'none'
+              }}
+              title="Fullscreen Iframe"
+            />
+          </div>
+        );
+      case 'js':
+        useEffect(() => {
+          const resizeIframe = () => {
+            if (iframeRef.current) {
+              iframeRef.current.style.width = window.innerWidth + 'px';
+              iframeRef.current.style.height = window.innerHeight + 'px';
+            }
+          };
+          
+          resizeIframe();
+          window.addEventListener('resize', resizeIframe);
+          
+          return () => {
+            window.removeEventListener('resize', resizeIframe);
+          };
+        }, []);
+        
+        return (
+          <iframe
+            ref={iframeRef}
+            src={source}
+            style={{
+              border: 'none',
+              position: 'absolute',
+              left: 0,
+              top: 0
+            }}
+            title="Fullscreen Iframe"
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (customUrl) {
+      setSource(customUrl);
+    }
+  };
+
+  return (
+    <div style={{
+      fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #1e3c72, #2a5298)',
+      color: '#fff',
+      padding: 0,
+      margin: 0,
+      overflow: 'hidden'
+    }}>
+      <header style={{
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        padding: '20px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap'
+      }}>
+        <h1 style={{ margin: 0, fontSize: '1.8rem' }}>React Iframe 全屏解决方案</h1>
+        
+        <div style={{ display: 'flex', gap: '15px', marginTop: '10px' }}>
+          <select 
+            value={method} 
+            onChange={(e) => setMethod(e.target.value)}
+            style={{
+              padding: '10px',
+              borderRadius: '5px',
+              backgroundColor: '#2c3e50',
+              color: 'white',
+              border: 'none'
+            }}
+          >
+            <option value="css">CSS绝对定位</option>
+            <option value="viewport">Viewport单位</option>
+            <option value="flex">Flex布局</option>
+            <option value="js">JavaScript动态调整</option>
+          </select>
+          
+          <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px' }}>
+            <input
+              type="text"
+              value={customUrl}
+              onChange={(e) => setCustomUrl(e.target.value)}
+              placeholder="输入URL (https://...)"
+              style={{
+                padding: '10px',
+                borderRadius: '5px',
+                border: 'none',
+                minWidth: '300px'
+              }}
+            />
+            <button 
+              type="submit"
+              style={{
+                padding: '10px 20px',
+                borderRadius: '5px',
+                backgroundColor: '#3498db',
+                color: 'white',
+                border: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              加载
+            </button>
+          </form>
+        </div>
+      </header>
+      
+      <div style={{
+        position: 'relative',
+        height: 'calc(100vh - 70px)',
+        width: '100vw'
+      }}>
+        {applyMethod()}
+      </div>
+      
+      <div style={{
+        position: 'fixed',
+        bottom: '20px',
+        right: '20px',
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        padding: '20px',
+        borderRadius: '10px',
+        maxWidth: '400px'
+      }}>
+        <h3 style={{ marginTop: 0 }}>当前方法: {getMethodName(method)}</h3>
+        <p>{getMethodDescription(method)}</p>
+        
+        <h4>代码示例:</h4>
+        <pre style={{
+          backgroundColor: '#2c3e50',
+          padding: '15px',
+          borderRadius: '5px',
+          overflowX: 'auto',
+          color: '#ecf0f1'
+        }}>
+          {getCodeExample(method)}
+        </pre>
+      </div>
+    </div>
+  );
+};
+
+// 辅助函数
+function getMethodName(method) {
+  const names = {
+    css: 'CSS绝对定位',
+    viewport: 'Viewport单位',
+    flex: 'Flex布局',
+    js: 'JavaScript动态调整'
+  };
+  return names[method] || '';
+}
+
+function getMethodDescription(method) {
+  const descriptions = {
+    css: '使用position: absolute和top/left/width/height属性让iframe覆盖整个屏幕',
+    viewport: '使用vw和vh视口单位设置iframe的宽高',
+    flex: '使用Flex布局让iframe填充父容器',
+    js: '使用JavaScript动态计算窗口大小并调整iframe尺寸'
+  };
+  return descriptions[method] || '';
+}
+
+function getCodeExample(method) {
+  const examples = {
+    css: `// CSS方法
+<iframe
+  src={source}
+  style={{
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    border: 'none'
+  }}
+/>`,
+    viewport: `// Viewport单位方法
+<iframe
+  src={source}
+  style={{
+    width: '100vw',
+    height: '100vh',
+    border: 'none'
+  }}
+/>`,
+    flex: `// Flex布局方法
+<div style={{ 
+  display: 'flex', 
+  flexDirection: 'column',
+  height: '100vh'
+}}>
+  <iframe
+    src={source}
+    style={{
+      flex: 1,
+      border: 'none'
+    }}
+  />
+</div>`,
+    js: `// JavaScript方法
+import { useEffect, useRef } from 'react';
+
+function FullScreenIframe() {
+  const iframeRef = useRef(null);
+  
+  useEffect(() => {
+    const resizeIframe = () => {
+      if (iframeRef.current) {
+        iframeRef.current.style.width = window.innerWidth + 'px';
+        iframeRef.current.style.height = window.innerHeight + 'px';
+      }
+    };
+    
+    resizeIframe();
+    window.addEventListener('resize', resizeIframe);
+    
+    return () => {
+      window.removeEventListener('resize', resizeIframe);
+    };
+  }, []);
+  
+  return (
+    <iframe
+      ref={iframeRef}
+      src={source}
+      style={{
+        border: 'none',
+        position: 'absolute',
+        left: 0,
+        top: 0
+      }}
+    />
+  );
+}`
+  };
+  
+  return examples[method] || '';
+}
+
+// 渲染应用
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+    <FullScreenIframe />
+  </React.StrictMode>
+);
+```
+
+## 功能说明
+
+这个React应用实现了四种不同的Iframe全屏解决方案：
+
+1. **CSS绝对定位方法**：
+   - 使用`position: absolute`将iframe固定在视口
+   - 设置`top: 0`, `left: 0`, `width: 100%`, `height: 100%`使其覆盖整个屏幕
+   - 最简单直接的实现方式
+
+2. **Viewport单位方法**：
+   - 使用`100vw`和`100vh`单位设置iframe宽高
+   - vw和vh分别代表视口宽度和高度的1%
+   - 现代浏览器都支持这种单位
+
+3. **Flex布局方法**：
+   - 使用flex布局让iframe填充父容器
+   - 父容器设置为`height: 100vh`
+   - iframe设置`flex: 1`占据剩余空间
+
+4. **JavaScript动态调整方法**：
+   - 使用`useRef`获取iframe引用
+   - 在`useEffect`中添加resize事件监听器
+   - 动态设置iframe的宽高为窗口尺寸
+
+## 附加功能
+
+1. **URL输入**：用户可以输入自定义URL加载不同网页
+2. **方法选择**：通过下拉菜单切换不同实现方法
+3. **实时代码示例**：右下角显示当前方法的代码实现
+4. **响应式设计**：适应不同屏幕尺寸
+5. **美观UI**：使用渐变背景和半透明信息面板
+
+## 使用方法
+
+1. 创建一个新的React应用：`npx create-react-app iframe-fullscreen`
+2. 将上面的代码替换`src/App.js`文件
+3. 启动应用：`npm start`
+4. 使用顶部控件选择不同方法或输入自定义URL
+
+这个实现解决了在React应用中iframe全屏显示的核心问题，同时提供了多种解决方案和良好的用户体验。
