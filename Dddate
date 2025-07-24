@@ -1,0 +1,24 @@
+const parseYMD = (str: string) => {
+  // 支持 'YYYY-MM-D' 或 'YYYY-M-D'
+  const [year, month, day] = str.split('-').map(Number);
+  return { year, month, day };
+};
+const parseYMDHMS = (str: string) => {
+  // 支持 'YYYY-MM-D HH:mm:ss' 或 'YYYY-M-D HH:mm:ss'
+  const [datePart, timePart = '0:0:0'] = str.trim().split(/\s+/);
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour = 0, minute = 0, second = 0] = timePart.split(':').map(Number);
+  return { year, month, day, hour, minute, second };
+};
+
+
+sortComparator: (v1: string, v2: string) => {
+      const d1 = parseYMDHMS(v1);
+      const d2 = parseYMDHMS(v2);
+      if (d1.year !== d2.year) return d1.year - d2.year;
+      if (d1.month !== d2.month) return d1.month - d2.month;
+      if (d1.day !== d2.day) return d1.day - d2.day;
+      if (d1.hour !== d2.hour) return d1.hour - d2.hour;
+      if (d1.minute !== d2.minute) return d1.minute - d2.minute;
+      return d1.second - d2.second;
+    },
